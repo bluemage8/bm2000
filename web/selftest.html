@@ -41,7 +41,10 @@
     log("deals checked: " + checked + "  invalid: " + bad);
     ok(bad === 0, "all deals are valid (13/seat, 52 total, unique)");
 
-    // 2) engine plays several deals to completion with random legal play
+    // 2) engine plays several deals.  Like the original it STOPS as soon as the
+    //    result is decided (contract reached, or it can no longer be reached),
+    //    so a deal may end with < 13 tricks / cards still in hand.  The
+    //    invariants are: it terminates, tricks<=13, and the stop is legal.
     var sample = [];
     for (var L = 0; L < data.levels.length; L++){
       var dd = data.levels[L].deals;
@@ -60,19 +63,26 @@
         if (seat === null) break;
         if (seat === SOUTH || seat === NORTH){
           var legal = App.game.legal();
-          // play a deterministic-but-legal card: first legal
           var card = legal[0];
           App.game.play(card);
         } else {
           App.game.defenseStep();
         }
       }
-      var left = 0;
-      for (var s2 = 0; s2 < 4; s2++) left += App.game.hands[s2].length;
-      if (!(App.game.done && left === 0 && App.game.tricks.length === 13)) playBad++;
+      var bad = false;
+      if (!App.game.done) bad = true;
+      if (App.game.tricks.length > 13) bad = true;
+      if (App.game.wonNS < 0 || App.game.wonNS > 13) bad = true;
+      // if it ended early, the stop must be the decided-condition
+      if (App.game.tricks.length < 13){
+        var need = App.game.needs;
+        var can = App.game.wonNS + (13 - App.game.tricks.length);
+        if (!(App.game.wonNS >= need || can < need)) bad = true;
+      }
+      if (bad) playBad++;
     }
     log("sample deals played: " + sample.length + "  failed: " + playBad);
-    ok(playBad === 0, "engine plays sampled deals to 13 tricks / 0 cards left");
+    ok(playBad === 0, "engine terminates each sampled deal at a decided result");
 
     // 3) trick cards stay on fixed anchors when the trick fills (no sliding)
     var anchors = {};
@@ -98,25 +108,33 @@
     var s2 = fitStage();
     ok(Math.abs(s2 - (500/794)) < 1e-6, "narrow window scales to width (500/794)");
 
-    // 5) contract / score sanity on a known deal
+    // 5) contract / score sanity on a known deal.  Also confirm the end-dialog
+    //    text resolves cleanly (no literal "(txt,by) =>" function leak) and
+    //    reports the "took X of Y" form.
     var d3 = data.levels[0].deals[0];
     var g = new Game(d3.hands, d3.contract);
     log("deal " + d3.name + " contract=" + (d3.contract && d3.contract.text) + " vuln=" + d3.vuln +
         " hcp=" + d3.hcp.join("/"));
     ok(!!(d3.contract || true), "first deal has contract object or pass");
+    var subMade = tAt("madeSub","en")(d3.contract ? d3.contract.text : "3NT", 6, 6);
+    var subMadeZh = tAt("madeSub","zh")(d3.contract ? d3.contract.text : "3NT", 6, 6);
+    ok(typeof subMade === "string" && subMade.indexOf("=>") === -1 && /\bof\b/.test(subMade),
+        "end-dialog madeSub resolves to a string (no fn leak), has 'of'");
+    ok(typeof subMadeZh === "string" && subMadeZh.indexOf("=>") === -1,
+        "end-dialog madeSub (zh) resolves to a string (no fn leak)");
 
     // 6) i18n: en/zh dictionaries differ, auto-detect maps locale->lang, and
     //    translating a key in each locale resolves the right string.
     ok(I18N.en.pageTitle !== I18N.zh.pageTitle, "i18n en/zh differ (pageTitle)");
-    ok(tAt("seatDealer", "zh") === "SOUTH  (declarer, you)", "i18n en seat label");
+    ok(tAt("seatDealer", "en") === "SOUTH  (declarer, you)", "i18n en seat label");
     ok(/南/.test(tAt("seatDealer", "zh")), "i18n zh seat label = 南…");
     ok(detectLocale("zh-CN") === "zh" && detectLocale("en-US") === "en",
         "i18n auto-detect maps zh*->zh, en*->en");
     ok(tAt("south", "zh") === "南" && tAt("south", "en") === "South",
         "i18n seatLabel south = 南 / South");
-    ok(tAt("replay", "zh") === "Replay" && tAt("movie", "zh") === "Movie",
+    ok(tAt("replay", "zh") === "重放" && tAt("movie", "zh") === "讲解",
         "i18n toolbar strings (zh) present");
-    ok(tAt("dealWord", "zh") === "DEAL" && tAt("nextDeal", "zh") === "下一副",
+    ok(tAt("dealWord", "zh") === "完成" && tAt("nextDeal", "zh") === "下一副",
         "i18n end-dialog strings (zh) present");
 
     log("\n==== RESULT: " + (failures.length === 0 ? "ALL PASS (" + checked + " deals)" : (failures.length + " FAILURES")) + " ====");
