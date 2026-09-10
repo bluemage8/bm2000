@@ -2,13 +2,17 @@
 
 [English](README.md)  ·  **简体中文 / Chinese**
 
+[![Build Android APK](https://github.com/bluemage8/bm2000/actions/workflows/build-apk.yml/badge.svg)](https://github.com/bluemage8/bm2000/actions/workflows/build-apk.yml)
+
 《桥牌大师 2000》的一个忠实重现 —— 这是 Windows 上一款经典的
-「教你作为庄家打桥牌」的教学程序。本项目包含**两个版本**，二者共用
+「教你作为庄家打桥牌」的教学程序。本项目包含**三个版本**，三者共用
 同一套经过验证的桥牌引擎：
 
 * **桌面版**（Python 3 + Tkinter），从 [`run.py`](run.py) 启动。
 * **网页版**（原生 JS + canvas），由 [`web/server.py`](web/server.py) 提供，
   把原先 794×547 的“窗口”等比缩放以适配浏览器窗口。
+* **安卓版**（Kotlin + WebView），位于 [`android/`](android/)，由
+  **GitHub Actions** 自动构建 —— 见下方[安卓 App](#安卓-app)。
 
 相同的 5 个关卡、相同的约 530 副牌例、相同的游戏模型、相同的专家讲解，
 以及相同的 **完成 / 未成（DEAL / FAILED）** 结算弹窗。
@@ -57,7 +61,8 @@
 │   ├── levels.py           #   关卡索引读取（winexe/hands/<n>）
 │   ├── playgame.py         #   逐墩交互式打牌引擎
 │   ├── replay.py           #   快速无人值守自动打牌（供测试）
-│   ├── bidding.py          #   简单的叫牌/定约工具
+│   ├── bidding.py          #   叫牌/定约 + 庄家判定
+│   ├── contract.py         #   定约语义：所需墩数(阶数+6)、成局/满贯判定、得分
 │   ├── engine.py           #   更上层的牌局执行器
 │   ├── gui.py              #   Tkinter 界面（目录 + 打牌页 + 弹窗）
 │   └── sound.py            #   音效存根
@@ -75,6 +80,7 @@
 │   ├── settings.gradle     #   Gradle 工程
 │   ├── app/src/main/assets #   打包进去的网页版 + deals.json/deals.js
 │   └── app/src/main/java/.../MainActivity.kt   # WebView 壳 + 数据桥接
+├── .github/workflows/      # GitHub Actions：自动构建 APK（见「安卓 App」）
 └── winexe/                 # 从原版提取的数据（不含 .exe）
     ├── hands/              #   5 个关卡的牌例数据（游戏主体）
     └── BM2000.HLP          #   原程序的帮助/说明文件
@@ -176,22 +182,51 @@ python server.py 9000
 
 ---
 
-## 运行安卓 App
+## 安卓 App
 
-安卓版（`android/`）是网页版的原生壳：WebView 加载打包进 APK 的网页版，
-牌例数据离线内置，全屏横屏、自适应缩放。玩法与网页版完全一致。
+安卓版（`android/`）是网页版的原生 **Kotlin + WebView** 壳：WebView 加载
+打包进 APK 的网页版（`index.html` / `app.js` / `style.css`），牌例数据离线
+内置（`assets/deals.json` + `deals.js` 预加载回退），794×547 牌桌自适应缩放到
+屏幕（横屏）。玩法与网页版完全一致。
 
-构建/安装详见 [`android/README.md`](android/README.md)。简略：
+### 直接拿 APK（无需自己构建）
+
+APK 由 **GitHub Actions**（`.github/workflows/build-apk.yml`）自动构建：
+
+* **每次 push 到 `main`** 都会产出一个新的 debug APK，可在该次运行的页面
+  下载 `bm2000-debug` 产物（[Actions](https://github.com/bluemage8/bm2000/actions)）。
+* **打版本 tag**（如 `git tag v1.0 && git push origin v1.0`）会自动创建一个
+  **GitHub Release** 并附上 APK —— 到 [Releases](https://github.com/bluemage8/bm2000/releases)
+  下载。
+
+安装：把 APK 拷到手机上打开即可（按需允许「允许安装未知来源应用」）。
+要求 Android 7.0+（API 24）。
+
+### 自己构建
+
+**不需要**原来的 WSL 工具链 —— 标准 JDK 17 + Android SDK 即可。仓库未附带
+Gradle wrapper jar，所以用系统 `gradle`（或 Android Studio）：
 
 ```bash
 cd android
-gradle wrapper --gradle-version 8.7      # 首次，生成本机 wrapper
-./gradlew :app:assembleDebug             # 产出 app/build/outputs/apk/debug/app-debug.apk
-./gradlew :app:installDebug              # 或直接装到已连接设备
+
+# 一次性：本机没有 wrapper jar 时先生成（需 PATH 上有 gradle）
+gradle wrapper --gradle-version 8.7
+
+# 构建 debug APK（可直接安装）
+gradle :app:assembleDebug
+#   -> app/build/outputs/apk/debug/app-debug.apk
 ```
 
-> 也可直接用 **Android Studio** 打开 `android/` 目录后 Run。要求 JDK 17 +
-> Android SDK（compileSdk 34），最低支持 Android 7.0（API 24）。
+前置条件：**JDK 17**、**Android SDK**（compileSdk 34）、**Gradle 8.7+**。
+`applicationId` = `com.bm2000.bridge`；`minSdk 24` / `targetSdk 34`。
+
+> 也可直接用 **Android Studio** 打开 `android/` 目录后 Run 到设备。
+> **release**（上架/签名）版本需要签名密钥：在 `app/build.gradle` 配置
+> `signingConfigs`，或用 Android Studio 的 *Build ▸ Generate Signed APK*。
+> CI 产出的是 debug 签名 APK。
+
+完整说明见 [`android/README.md`](android/README.md)。
 
 ---
 
@@ -203,7 +238,11 @@ gradle wrapper --gradle-version 8.7      # 首次，生成本机 wrapper
   领出花色中最大的牌。
 * **合法出牌** — 若持有领出花色则必须跟牌；否则可吃张（出主牌）或垫牌。
 * **轮转领出** — 进墩者领出下一墩；我方只能从实际轮到的北/南手里出牌。
-* **结果** — 北家 + 南家拿到 ≥ 定约级数的墩数即为*完成*；否则为*未成*。
+* **结果** — 北家 + 南家拿到的墩数 ≥ **阶数 + 6** 即为*完成*（1 阶定约需
+  7 墩、4 阶高花需 10 墩、7 阶大满贯需全部 13 墩）；否则为*未成*。结算弹窗
+  会给出得分：墩分（低花 20/阶、高花 30/阶、无将 40 + 30·(阶−1)），达到成局
+  线（3NT / 4♥ / 4♠ / 5♣ / 5♦）加**成局**奖分，6 阶加**小满贯**奖分、7 阶加
+  **大满贯**奖分，未成时按差几墩罚分。
 
 防务 AI 在两个版本中使用同一套**约定**（并非深度对抗搜索）。这是文档中
 说明的、有意的简化。

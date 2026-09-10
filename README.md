@@ -2,15 +2,17 @@
 
 [**简体中文 / Chinese**](README_ZH.md)  ·  English
 
-
+[![Build Android APK](https://github.com/bluemage8/bm2000/actions/workflows/build-apk.yml/badge.svg)](https://github.com/bluemage8/bm2000/actions/workflows/build-apk.yml)
 
 A faithful re-implementation of **Bridge Master 2000** — a classic Windows
-"learn to play bridge as declarer" teaching program.  It includes **two builds**
+"learn to play bridge as declarer" teaching program.  It includes **three builds**
 that share one verified bridge engine:
 
 * **A desktop build** (Python 3 + Tkinter) launched from [`run.py`](run.py).
 * **A browser build** (vanilla JS + canvas) served by [`web/server.py`](web/server.py),
   which scales the original 794×547 "window" to fit your browser.
+* **An Android build** (Kotlin + WebView) in [`android/`](android/), built
+  automatically by **GitHub Actions** — see [Android app](#android-app) below.
 
 Same 5 skill levels, same ~530 deals, same game model, same expert narration,
 same flashy **DEAL / FAILED** end-of-deal dialog.
@@ -53,7 +55,9 @@ matter.
 │   ├── levels.py           #   level index reader (winexe/hands/<n>)
 │   ├── playgame.py         #   interactive trick-by-trick play engine
 │   ├── replay.py           #   fast headless auto-play (for tests)
-│   ├── bidding.py          #   simple bidding / contract helpers
+│   ├── bidding.py          #   bidding / contract + declarer determination
+│   ├── contract.py         #   contract semantics: tricks needed (level+6),
+│   │                       #     game / slam detection, scoring breakdown
 │   ├── engine.py           #   higher-level deal runner
 │   ├── gui.py              #   the Tkinter GUI (TOC + play view + dialogs)
 │   └── sound.py            #   tiny sound-effect stub
@@ -66,6 +70,11 @@ matter.
 │   ├── app.js              #   play engine + canvas rendering + scaling
 │   ├── selftest.html       #   in-browser smoke test (loads + plays deals)
 │   └── README.md           #   web-specific usage + deployment notes
+├── android/                # Android app (Kotlin + WebView shell)
+│   ├── app/src/main/assets #   bundled web edition + deals.json/deals.js
+│   ├── app/src/main/java/.../MainActivity.kt   # WebView shell + data bridge
+│   └── README.md           #   Android build / install notes
+├── .github/workflows/      # GitHub Actions: build the APK (see "Android app")
 └── winexe/                 # data extracted from the original (no .exe)
     ├── hands/              #   the 5 levels of deal data (the games)
     └── BM2000.HLP          #   the original program's help/manual file
@@ -169,6 +178,58 @@ sample of them to completion, and checks the responsive scaling.  It prints
 
 ---
 
+## Android app
+
+The Android build (`android/`) is a native **Kotlin + WebView** shell around the
+same web edition: the WebView loads the bundled `index.html` / `app.js` /
+`style.css`, the deal table is packaged offline (`assets/deals.json` + a
+`deals.js` preloader fallback), and the 794×547 board auto-scales to the
+screen (landscape).  Gameplay is identical to the web build.
+
+### Getting the APK (no build required)
+
+The APK is built automatically by **GitHub Actions** (`.github/workflows/build-apk.yml`):
+
+* **Every push to `main`** produces a fresh debug APK, available as the
+  `bm2000-debug` artifact on the run's page
+  ([Actions](https://github.com/bluemage8/bm2000/actions)).
+* **Pushing a version tag** (e.g. `git tag v1.0 && git push origin v1.0`)
+  creates a **GitHub Release** with the APK attached — download it from
+  [Releases](https://github.com/bluemage8/bm2000/releases).
+
+To install on a phone: copy the APK to the device and open it (allow
+"install from unknown sources" when prompted).  Requires Android 7.0+ (API 24).
+
+### Building it yourself
+
+You do **not** need the original WSL toolchain — a standard JDK 17 + Android
+SDK is enough.  The repo does not ship the Gradle wrapper jar, so invoke the
+system `gradle` (or Android Studio):
+
+```bash
+cd android
+
+# one-time: if you don't have a Gradle wrapper jar, generate it (needs gradle on PATH)
+gradle wrapper --gradle-version 8.7
+
+# build a debug APK (installable as-is)
+gradle :app:assembleDebug
+#   -> app/build/outputs/apk/debug/app-debug.apk
+
+# or open the android/ folder in Android Studio and Run to a device
+```
+
+Prereqs: **JDK 17**, **Android SDK** (compileSdk 34), **Gradle 8.7+**.
+`applicationId` is `com.bm2000.bridge`; `minSdk 24` / `targetSdk 34`.
+
+> A **release** (Play-store / signed) build needs a signing key; configure
+> `signingConfigs` in `app/build.gradle` or use Android Studio's
+> *Build ▸ Generate Signed APK*.  The CI build ships a debug-signed APK.
+
+Full details live in [`android/README.md`](android/README.md).
+
+---
+
 ## The game model (both builds)
 
 The desktop and web builds both delegate to the same rules, so they behave
@@ -180,8 +241,13 @@ identically:
   may ruff (play a trump) or discard.
 * **Lead rotation** — the winner of a trick leads the next; the human may play
   only from whichever of North/South is actually on lead.
-* **Result** — the contract is *made* if North+South take ≥ the contract level
-  tricks; otherwise it is *down*.
+* **Result** — the contract is *made* if North+South take at least
+  **level + 6** tricks (a 1-level contract needs 7, a 4-level high-major 10,
+  a 7-level grand slam all 13); otherwise it is *down*.  The end-of-deal
+  dialog scores the result: trick points (minors 20/level, majors 30/level,
+  NT 40 + 30·(level−1)), a **game** bonus when the contract reaches the game
+  line (3NT / 4♥ / 4♠ / 5♣ / 5♦), **small-slam** (6-level) and **grand-slam**
+  (7-level) bonuses, and an undertrick penalty when defeated.
 
 The defensive AI uses the same **conventions** in both builds (it is not a deep
 adversarial search).  This is documented as a known, intentional simplification.

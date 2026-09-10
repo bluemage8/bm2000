@@ -34,6 +34,21 @@ android/
 
 ## 构建
 
+### 方式一：GitHub Actions 自动构建（推荐，无需本地环境）
+
+仓库根目录的 `.github/workflows/build-apk.yml` 会：
+
+- **每次 push 到 `main`** 自动 `assembleDebug`，产物 `bm2000-debug` 可在
+  [Actions 运行页](https://github.com/bluemage8/bm2000/actions) 下载。
+- **打版本 tag**（`git tag v1.0 && git push origin v1.0`）自动创建
+  [GitHub Release](https://github.com/bluemage8/bm2000/releases) 并附 APK。
+
+CI 里用 `actions/setup-java`(JDK 17) + `gradle/actions/setup-gradle`(8.7) +
+`android-actions/setup-android` 组装工具链；因仓库不带 wrapper jar，直接用
+`gradle :app:assembleDebug`。
+
+### 方式二：本地构建
+
 前置条件：
 
 - JDK 17
