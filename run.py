@@ -100,11 +100,13 @@ def _play(level: str = "", deal: str = "") -> None:
                recs[0])
     rep = play_deal(rec.solution.deal, rec.solution.contract, rec.solution)
     decl, level, suit = rec.solution.contract
+    # the declarer side is declarer + dummy (partner); they must take
+    # level + 6 tricks (a 1-level contract needs 7, a 4-level major 10, ...)
     won = sum(1 for t in rep.tricks if t.cards[0][0] in (decl, (decl + 2) % 4))
-    res = won - level
-    print("Deal %s  contract %s  declarer tricks %d  -> %s" % (
+    res = won - (level + 6)
+    print("Deal %s  contract %s  declarer tricks %d (needs %d)  -> %s" % (
         rec.name, "%s%s" % (level, suit.upper() if suit != "n" else "NT"),
-        won, "MADE" if res >= 0 else "%d down" % abs(res)))
+        won, level + 6, "MADE" if res >= 0 else "%d down" % abs(res)))
 
 
 def main(argv) -> None:

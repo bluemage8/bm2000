@@ -1,0 +1,46 @@
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android' version '1.8.22'
+}
+
+android {
+    namespace 'com.bm2000.bridge'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.bm2000.bridge"
+        minSdk 24
+        targetSdk 34
+        versionCode 1
+        versionName "1.0"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+    kotlinOptions {
+        jvmTarget = '1.8'
+    }
+}
+
+dependencies {
+    implementation 'androidx.appcompat:appcompat:1.7.0'
+    implementation 'androidx.webkit:webkit:1.11.0'
+}
+
+// appcompat pulls old kotlin-stdlib-jdk7/jdk8 (1.6.21) that conflict with the
+// newer kotlin-stdlib (1.8.x) AGP brings in.  Force a single kotlin stdlib set.
+configurations.all {
+    resolutionStrategy {
+        force 'org.jetbrains.kotlin:kotlin-stdlib:1.8.22'
+        force 'org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.8.22'
+        force 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.8.22'
+    }
+}

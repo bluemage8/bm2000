@@ -172,14 +172,19 @@ class PlayState:
             return []
         return legal_cards(self.hands[seat], self.trick)
 
+    @property
+    def tricks_needed(self) -> int:
+        """Tricks the declarer side (NS) must take: contract level + 6."""
+        return (self.contract[1] + 6) if self.contract else 0
+
     def score(self) -> Tuple[int, int]:
-        level = self.contract[1] if self.contract else 0
-        return self.won_ns, level
+        """(tricks won by NS, tricks the contract requires)."""
+        return self.won_ns, self.tricks_needed
 
     def made(self) -> bool:
         if not self.contract:
             return True
-        return self.won_ns >= self.contract[1]
+        return self.won_ns >= self.tricks_needed
 
     @property
     def decided(self) -> bool:
@@ -187,13 +192,13 @@ class PlayState:
         play is interrupted before all 13 tricks once North+South have reached
         the contract's trick goal, or once it is impossible for them to make it
         even by winning every remaining trick)."""
-        level = self.contract[1] if self.contract else 0
-        if level <= 0:
+        need = self.tricks_needed
+        if need <= 0:
             return len(self.tricks) >= 13
-        if self.won_ns >= level:
+        if self.won_ns >= need:
             return True
         remaining = 13 - len(self.tricks)
-        if self.won_ns + remaining < level:
+        if self.won_ns + remaining < need:
             return True
         return False
 

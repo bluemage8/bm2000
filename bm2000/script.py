@@ -162,9 +162,11 @@ def parse_solution(rec: str) -> Solution:
             continue
         i += 1
 
-    nonp = [b for _s, b in sol.auction if b is not None]
-    if nonp:
-        sol.contract = final_contract(nonp)
+    # The contract's declarer is the *seat* that made the final (highest) bid.
+    # Pass the full (seat, Bid) auction so the real seat is used -- not a
+    # pass-stripped index (which produced the wrong declarer for every deal).
+    if any(b is not None for _s, b in sol.auction):
+        sol.contract = final_contract(sol.auction)
     return sol
 
 

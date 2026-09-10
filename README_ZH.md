@@ -71,6 +71,10 @@
 │   ├── selftest.html       #   浏览器内冒烟测试
 │   ├── README.md           #   网页版使用/部署说明（英文）
 │   └── README_ZH.md        #   网页版使用/部署说明（中文）
+├── android/                # 安卓 App（Kotlin + WebView，详见 android/README.md）
+│   ├── settings.gradle     #   Gradle 工程
+│   ├── app/src/main/assets #   打包进去的网页版 + deals.json/deals.js
+│   └── app/src/main/java/.../MainActivity.kt   # WebView 壳 + 数据桥接
 └── winexe/                 # 从原版提取的数据（不含 .exe）
     ├── hands/              #   5 个关卡的牌例数据（游戏主体）
     └── BM2000.HLP          #   原程序的帮助/说明文件
@@ -169,6 +173,25 @@ python server.py 9000
 打开 `web/selftest.html`（通过 **http://localhost:8321/selftest.html** 提供）。
 它会载入全部 530 副牌、把抽样牌例打到结束，并验证自适应缩放。数据与引擎
 正常时会打印 **`RESULT: ALL PASS`**。
+
+---
+
+## 运行安卓 App
+
+安卓版（`android/`）是网页版的原生壳：WebView 加载打包进 APK 的网页版，
+牌例数据离线内置，全屏横屏、自适应缩放。玩法与网页版完全一致。
+
+构建/安装详见 [`android/README.md`](android/README.md)。简略：
+
+```bash
+cd android
+gradle wrapper --gradle-version 8.7      # 首次，生成本机 wrapper
+./gradlew :app:assembleDebug             # 产出 app/build/outputs/apk/debug/app-debug.apk
+./gradlew :app:installDebug              # 或直接装到已连接设备
+```
+
+> 也可直接用 **Android Studio** 打开 `android/` 目录后 Run。要求 JDK 17 +
+> Android SDK（compileSdk 34），最低支持 Android 7.0（API 24）。
 
 ---
 

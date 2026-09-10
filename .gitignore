@@ -28,3 +28,11 @@ env/
 # OS noise
 Thumbs.db
 .DS_Store
+
+# Android build artifacts (regenerable via android/wslscripts/build_debug.sh)
+*.apk
+android/local.properties
+android/.gradle/
+android/app/build/
+android/build/
+android/build/

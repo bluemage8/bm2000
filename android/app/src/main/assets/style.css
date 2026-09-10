@@ -1,0 +1,294 @@
+/* Bridge Master 2000 -- web edition.
+   The whole app lives on a fixed 794x547 #stage (the original window size),
+   scaled to fit the browser window while keeping its aspect ratio. */
+
+:root {
+  --win-bg: #f0f0f0;
+  --win-dk: #808080;
+  --win-lt: #ffffff;
+  --felt: #0b5d2e;
+  --felt-edge: #063d1e;
+  --gold: #ffd24a;
+  --body-font: "Segoe UI", "Microsoft YaHei", "PingFang SC", Tahoma, Arial, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: #1c2733;            /* dark surround so the scaled window stands out */
+  font-family: var(--body-font);
+  overflow: hidden;               /* the stage is scaled, not the page scrolled */
+}
+
+/* floating EN / 中文 switch (fixed in screen space, not scaled with the stage) */
+#langbar {
+  position: fixed; top: 10px; right: 12px; z-index: 50;
+  display: flex; gap: 6px;
+}
+.langbtn {
+  min-width: 52px; height: 26px; padding: 0 10px;
+  font: bold 13px var(--body-font);
+  color: #d7e0ea; background: rgba(28,40,55,.85);
+  border: 1px solid #3a4a5e; border-radius: 5px; cursor: pointer;
+}
+.langbtn:hover { border-color: #6ea8fe; }
+.langbtn.on { color: #fff; background: #1f6feb; border-color: #1f6feb; }
+
+/* full-viewport box; clips the scaled stage so nothing overflows.
+   NOTE: explicit top/left/right/bottom -- the `inset` shorthand is not
+   reliable on the WebView bundled with Android 7.1 (chromium ~86). */
+#viewport {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  overflow: hidden;
+  background: #1c2733;
+}
+
+/* the fixed-size "window" that gets scaled.  fitStage() applies
+   `transform: translate(...) scale(...)` (origin top-left) so the 794x547
+   design is centred in the viewport and fully visible at any screen size. */
+#stage {
+  width: 794px;
+  height: 547px;
+  background: var(--win-bg);
+  transform-origin: top left;
+  box-shadow: 0 8px 40px rgba(0,0,0,.55);
+  border: 1px solid #0a0f14;
+  position: absolute;
+  left: 0;
+  top: 0;
+  overflow: hidden;
+}
+
+.view { position: absolute; top: 0; left: 0; right: 0; bottom: 0; }
+.hidden { display: none !important; }
+
+/* ---------------- TOC ---------------- */
+#toc {
+  display: flex;
+  flex-direction: column;
+}
+
+.lvcol {
+  position: absolute;
+  left: 4px; top: 4px; bottom: 26px;
+  width: 108px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 4px;
+}
+.lvbtn {
+  height: 34px;
+  border: 2px outset #fff;
+  color: #fff;
+  font: bold 14px var(--body-font);
+  cursor: pointer;
+  border-radius: 2px;
+}
+.lvbtn:active { border-style: inset; }
+
+.deal-pane {
+  position: absolute;
+  left: 116px; right: 4px; top: 4px; bottom: 22px;
+  display: flex;
+  border: 2px inset #fff;
+  background: #fff;
+  overflow: hidden;
+}
+.deal-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0;
+}
+.deal-rows {
+  list-style: none;
+  margin: 0; padding: 0;
+}
+.deal-row {
+  display: flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px;
+  font: 12px "Consolas", "Courier New", monospace;
+  color: #102;
+  cursor: default;
+  white-space: nowrap;
+  border-bottom: 1px solid #f0f0f0;
+}
+.deal-row .nm {
+  flex: 0 0 92px;
+  text-align: left;
+  color: #333;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.deal-row .ct {
+  flex: 1;
+  text-align: left;
+  padding-left: 6px;
+  border-left: 1px solid #e2e2e2;
+  color: #555;
+}
+.deal-row .mk { width: 14px; text-align: center; font-weight: bold; }
+.deal-row.sel { background: #cfe3ff; outline: 1px dotted #000; }
+.deal-row.made { background: #d7ffd7; }
+.deal-row.down { background: #ffd7d7; }
+
+.status {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 22px;
+  line-height: 22px;
+  padding: 0 6px;
+  border-top: 1px solid var(--win-dk);
+  background: var(--win-bg);
+  font: 11px var(--body-font);
+  color: #111;
+}
+
+/* ---------------- PLAY ---------------- */
+#play { display: flex; flex-direction: column; }
+
+/* Top info strip: bidding + contract + vuln + HCP + live score.  Sized big
+   enough to read at a glance (the user asked: "顶部的信息栏太小了"). */
+.play-strip {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 3px 10px;
+  background: linear-gradient(#f6f8ff, #e8ecfb);
+  border-bottom: 1px solid #b9c;
+  color: #222;
+  min-height: 50px;
+  overflow: hidden;
+}
+.play-strip .row { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.play-strip .row-score {
+  font: bold 15px "Consolas", "Courier New", monospace;
+  color: #102a12;
+}
+.play-strip .row-score .ns { color: #0a6b12; }
+.play-strip .row-score .ew { color: #8a1010; }
+.play-strip .row-auction {
+  font: 12px "Consolas", "Courier New", monospace;
+  color: #445;
+  letter-spacing: .5px;
+}
+.play-strip .row-contract {
+  font: bold 13px var(--body-font);
+  color: #222;
+}
+.play-strip .row-contract b { color: #0a6b12; }
+.play-strip .row-contract .vuln { color: #666; font-weight: normal; }
+
+.board-wrap {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+}
+#board { position: absolute; top: 0; left: 0; right: 0; bottom: 0; width: 100%; height: 100%; cursor: pointer; }
+
+.narr {
+  height: 60px;
+  background: #fff;
+  border-top: 1px solid #b8c;
+  padding: 4px 8px;
+  font: 12px var(--body-font);
+  color: #111;
+  overflow: hidden;
+}
+
+.toolbar {
+  height: 24px;
+  display: flex;
+  gap: 4px;
+  padding: 2px 4px;
+  background: var(--win-bg);
+  border-top: 1px solid var(--win-dk);
+}
+.toolbar button {
+  height: 20px;
+  padding: 0 8px;
+  font: 11px var(--body-font);
+  border: 2px outset #fff;
+  background: var(--win-bg);
+  cursor: pointer;
+}
+.toolbar button:active { border-style: inset; }
+.toolbar button.on { border-style: inset; background: #dfe8ff; }
+
+/* ---------------- end-of-deal dialog ---------------- */
+.modal {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,.45);
+  z-index: 50;
+}
+.dlg {
+  width: 460px;
+  max-width: 90vw;
+  background: #0e1430;
+  color: #fff;
+  border-radius: 8px;
+  padding: 22px 18px;
+  text-align: center;
+  box-shadow: 0 12px 60px rgba(0,0,0,.6);
+}
+.end-word {
+  font: 800 58px "Arial Black", Arial, sans-serif;
+  letter-spacing: 2px;
+  margin-bottom: 6px;
+}
+.end-word.made { color: var(--gold); text-shadow: 0 0 18px rgba(255,210,74,.7); }
+.end-word.down { color: #ff5a4a; text-shadow: 0 0 18px rgba(255,90,74,.7); }
+.end-word.beat { animation: pulse 1.1s ease-in-out infinite; }
+@keyframes pulse {
+  0%,100% { transform: scale(1); filter: brightness(1); }
+  50%      { transform: scale(1.06); filter: brightness(1.25); }
+}
+.end-score {
+  font: bold 15px "Consolas", monospace;
+  color: #cfe8cf;
+  margin: 4px 0;
+}
+.end-sub { font: 14px var(--body-font); margin-bottom: 14px; min-height: 18px; }
+.end-btns { display: flex; gap: 10px; justify-content: center; }
+.eb {
+  width: 128px; height: 34px;
+  font: bold 13px var(--body-font);
+  color: #fff; border: none; border-radius: 4px; cursor: pointer;
+}
+.eb:active { filter: brightness(.9); }
+.eb.restart { background: #1f6feb; }
+.eb.answer  { background: #8a5a2a; }
+.eb.next    { background: #2ea44f; }
+
+/* ------------------------------------------------------------------ */
+/*  phone mode -- <html class="phone"> (innerWidth < 900).  The 794x547 */
+/*  design is scaled down on a phone, so bump fonts / button heights /  */
+/*  row heights to keep the deal list and toolbar readable & tappable.  */
+/*  (No `:is()` / `inset` -- the bundled WebView is chromium ~86.)      */
+/* ------------------------------------------------------------------ */
+html.phone .lvbtn { height: 46px; font: bold 19px var(--body-font); }
+html.phone .lvcol { width: 132px; gap: 14px; }
+html.phone .deal-pane { left: 140px; }
+html.phone .deal-row { height: 34px; font: 17px "Consolas", "Courier New", monospace; }
+html.phone .deal-row .nm { flex: 0 0 110px; }
+html.phone .status { height: 30px; line-height: 30px; font: 15px var(--body-font); }
+html.phone .toolbar { height: 40px; gap: 6px; padding: 4px 6px; }
+html.phone .toolbar button { height: 32px; padding: 0 12px; font: bold 15px var(--body-font); }
+html.phone .play-strip { min-height: 64px; padding: 5px 12px; }
+html.phone .play-strip .row-score { font: bold 19px "Consolas", "Courier New", monospace; }
+html.phone .play-strip .row-auction { font: 15px "Consolas", "Courier New", monospace; }
+html.phone .play-strip .row-contract { font: bold 17px var(--body-font); }
+html.phone .narr { height: 72px; font: 15px var(--body-font); }
+html.phone .langbtn { min-width: 58px; height: 32px; font: bold 15px var(--body-font); }
+html.phone .modal .dlg { width: 92%; padding: 26px 18px; }
+html.phone .end-word { font: 800 64px "Arial Black", Arial, sans-serif; }
+html.phone .eb { width: 30%; height: 44px; font: bold 15px var(--body-font); }

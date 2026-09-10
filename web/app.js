@@ -37,6 +37,7 @@ const I18N = {
     tocStatus: (n) => "Lv " + n + ": ",              // + " 530 deals. Click a deal to play."
     tocStatusDeals: " deals. Click a deal to play.",
     pass: "Pass",
+    back: "Back",
     replay: "Replay", takeback: "Take back", step: "Step", claim: "Claim",
     movie: "Movie", bigBtn: "Big", smallBtn: "Small",
     by: "by", passout: "Pass out", vuln: "Vuln", hcp: "HCP", trick: "Trick",
@@ -51,6 +52,9 @@ const I18N = {
     passOutSub: "Pass out — no contract reached.",
     madeSub: (txt, won, lv) => txt + " made  (" + won + " of " + lv + " tricks won)",
     downSub: (txt, won, lv) => txt + " down  (" + won + " of " + lv + " tricks won)",
+    points: "Score",
+    gameMade: "Game", smallSlam: "Small slam", grandSlam: "Grand slam",
+    major: "Major", minor: "Minor",
     expert: "Expert rating",
     restart: "Restart deal", showAnswer: "Show answer", nextDeal: "Next deal",
   },
@@ -65,6 +69,7 @@ const I18N = {
     tocStatus: (n) => "第" + n + "级：",
     tocStatusDeals: " 副。点击一副牌开始。",
     pass: "Pass",
+    back: "返回",
     replay: "重放", takeback: "悔棋", step: "单步", claim: "摊牌",
     movie: "讲解", bigBtn: "放大", smallBtn: "缩小",
     by: "由", passout: "Pass", vuln: "局况", hcp: "大牌", trick: "墩",
@@ -79,6 +84,9 @@ const I18N = {
     passOutSub: "Pass — 未叫成定约。",
     madeSub: (txt, won, lv) => txt + " 完成（拿到 " + won + " 墩，需 " + lv + " 墩）",
     downSub: (txt, won, lv) => txt + " 未成（拿到 " + won + " 墩，需 " + lv + " 墩）",
+    points: "得分",
+    gameMade: "成局", smallSlam: "小满贯", grandSlam: "大满贯",
+    major: "高花", minor: "低花",
     expert: "专家评分",
     restart: "重新开始", showAnswer: "显示答案", nextDeal: "下一副",
   },
@@ -151,9 +159,16 @@ const el = (tag, cls, html) => {
 const STAGE_W = 794, STAGE_H = 547;
 function fitStage() {
   const stage = $("stage");
-  const vw = window.innerWidth, vh = window.innerHeight;
-  const s = Math.min(vw / STAGE_W, vh / STAGE_H, 3);   // cap upscale at 3x
-  stage.style.transform = "scale(" + s + ")";
+  if (!stage) return 1;
+  const vw = window.innerWidth || document.documentElement.clientWidth;
+  const vh = window.innerHeight || document.documentElement.clientHeight;
+  // scale the 794x547 design to fill the viewport (no upscale cap -- phones
+  // need it bigger), preserving aspect ratio.
+  const s = Math.min(vw / STAGE_W, vh / STAGE_H);
+  // centre the scaled box: origin is top-left, so translate by the leftover.
+  const tx = Math.round((vw - STAGE_W * s) / 2);
+  const ty = Math.round((vh - STAGE_H * s) / 2);
+  stage.style.transform = "translate(" + tx + "px," + ty + "px) scale(" + s + ")";
   return s;
 }
 
@@ -261,8 +276,11 @@ class Game {
   }
   get toPlay() { return this.done ? null : (this.leader + this.trick.length) % 4; }
   get tricksPlayed() { return this.tricks.length; }
-  get score() { const lvl = this.contract ? this.contract.level : 0; return [this.wonNS, lvl]; }
-  get needs() { return this.contract ? this.contract.level : 0; }
+  // A level-N contract requires N+6 tricks (1-level needs 7, 4-major needs 10,
+  // 7-level grand slam needs all 13).  The old code compared against the bare
+  // level -- off by 6 -- so it mis-judged every hand.
+  get needs() { return this.contract ? this.contract.level + 6 : 0; }
+  get score() { return [this.wonNS, this.needs]; }
   // Bridge Master stops as soon as the result is decided (HLP: play is
   // interrupted before all 13 tricks once "the defenders win enough tricks so
   // that it is impossible for declarer to win the optimum number of tricks,
@@ -369,6 +387,10 @@ App = {
   board: null,
   ctx: null,
   big: true,
+  // phones have a small CSS viewport (MI 5X ~640x360); scale the design up so
+  // cards / text / buttons are tappable and readable.  desktop (browser) is
+  // wide enough to keep the original 794x547 layout.
+  phone: (typeof window !== "undefined" && window.innerWidth < 900),
 };
 
 // ---------------------------------------------------------------------------
@@ -458,6 +480,17 @@ function buildNarrPages(captions) {
   return captions.filter((c) => c && c.trim());
 }
 
+function backToToc() {
+  App.game = null;
+  App.collectingWinner = null;
+  App.movieMode = false;
+  App.moviePage = 0;
+  App.undoStack = [];
+  setTocVisible(true);
+  // refresh the deal list so the just-played deal shows its result mark
+  selectLevel(App.curLevel);
+}
+
 function buildToolbar() {
   const tb = $("toolbar");
   tb.innerHTML = "";
@@ -467,6 +500,9 @@ function buildToolbar() {
     tb.appendChild(b);
     return b;
   };
+  // "Back" to the deal list -- always shown (essential on phones where the
+  // Android back button is often hidden by the immersive full-screen UI).
+  mk("← " + t("back"), backToToc, false);
   mk(t("replay"), () => { const g = App.game; g = resetGame(); }, false);
   mk(t("takeback"), undo, false);
   mk(t("step"), stepForward, false);
@@ -618,18 +654,35 @@ function playCard(indexInHand, seat) {
 // ---------------------------------------------------------------------------
 function dims() {
   const big = App.big;
-  const cw = big ? 34 : 24, ch = big ? 46 : 34, gap = big ? 3 : 2;
+  // phone mode: the 794-wide stage is scaled down to a small viewport, so cards
+  // drawn in design coords look tiny.  Scale them up (and overlap the hand).
+  const k = App.phone ? 1.6 : 1;
+  const cw = (big ? 34 : 24) * k, ch = (big ? 46 : 34) * k, gap = (big ? 3 : 2) * k;
   return [cw, ch, gap];
 }
 function playDims() {
   const big = App.big;
-  return big ? [40, 56, 4] : [28, 40, 2];
+  const k = App.phone ? 1.6 : 1;
+  return big ? [40 * k, 56 * k, 4 * k] : [28 * k, 40 * k, 2 * k];
+}
+
+// step between hand cards.  On phone the hand overlaps so all 13 fit the
+// stage width; on desktop cards sit side by side with a gap.
+function handStep(n, w, d) {
+  const [cw, , gap] = d || dims();
+  const flat = n * cw + (n - 1) * gap;
+  if (!App.phone) return { step: cw + gap, x0: (w - flat) / 2 };
+  // phone: overlap the hand by half a card width (each card shows its right
+  // half).  13 cards * (cw/2 step) stays well within the stage width.
+  const step = cw / 2;
+  const x0 = (w - (step * (n - 1) + cw)) / 2;
+  return { step, x0 };
 }
 
 function handX(seat, i, n, w, d) {
-  const [cw, , gap] = d || dims();
-  const total = n * cw + (n - 1) * gap;
-  const x0 = (w - total) / 2;
+  const { step, x0 } = handStep(n, w, d);
+  void dims;
+  return x0 + i * step;
   return x0 + i * (cw + gap);
 }
 function handY(seat, h, d) {
@@ -702,9 +755,9 @@ function render() {
   for (const seat of [NORTH, SOUTH]) {
     const hand = hands[seat].slice().sort((a, b) => suitSeq(a.s) - suitSeq(b.s) || -a.r + b.r);
     const y = handY(seat, h, playDims());
-    const x0 = handX(seat, 0, hand.length, w, playDims());
+    const hs = handStep(hand.length, w, playDims());
     hand.forEach((card, i) => {
-      const x = x0 + i * (pcw + 4);
+      const x = hs.x0 + i * hs.step;
       // legal only if this hand is on lead AND the card is in the legal set
       const hl = (humanTurn && seat === toPlay) && valid.some((c) => sameCard(c, card));
       drawCard(ctx, x, y, pcw, pch, card, true, /*dim*/ false, /*highlight*/ hl);
@@ -801,29 +854,85 @@ function renderNarr() {
 }
 
 // ---------------------------------------------------------------------------
+//  contract scoring (mirrors bm2000/contract.py)
+// ---------------------------------------------------------------------------
+// A level-N contract needs N+6 tricks.  Trick points: minors 20/level,
+// majors 30/level, NT 40+30*(level-1).  Made contracts that reach the game
+// line (3NT, 4M, 5m) earn the game bonus; level 6 = small slam, level 7 =
+// grand slam, each with its own bonus.  Defeats accrue an undertrick penalty.
+const _TP = { c: 20, d: 20, h: 30, s: 30 };
+function trickPoints(level, suit) {
+  if (suit === "n") return 40 + 30 * (level - 1);
+  return (_TP[suit] || 0) * level;
+}
+function isGameContract(level, suit) {
+  if (suit === "n") return level >= 3;
+  if (suit === "h" || suit === "s") return level >= 4;
+  return level >= 5;  // minors
+}
+function contractScore(won, contract) {
+  if (!contract) return null;
+  const level = contract.level, suit = contract.suit;
+  const needed = level + 6;
+  const made = won >= needed;
+  const over = Math.max(0, won - needed);
+  const under = Math.max(0, needed - won);
+  let tp = 0, bonus = 0, penalty = 0, kind = "defeated";
+  if (made) {
+    tp = trickPoints(level, suit);
+    if (level === 7)      { bonus = 750; kind = "grand_slam"; }
+    else if (level === 6) { bonus = 500; kind = "small_slam"; }
+    else if (isGameContract(level, suit)) { bonus = 300; kind = "game"; }
+    else if (suit === "h" || suit === "s") { bonus = 0; kind = "major"; }
+    else if (suit === "n") { bonus = 0; kind = "nt"; }
+    else { bonus = 0; kind = "minor"; }
+  } else {
+    penalty = under * 50;
+  }
+  return {
+    text: contract.text, level, suit, needed, won, made, over, under,
+    trick_points: tp, bonus, penalty, total: tp + bonus - penalty, kind
+  };
+}
+// localised label for the contract "kind" (game / slam) shown in the dialog
+function kindLabel(kind) {
+  return {
+    grand_slam: t("grandSlam"), small_slam: t("smallSlam"), game: t("gameMade"),
+    major: t("major"), minor: t("minor"), nt: "NT"
+  }[kind] || "";
+}
+
+// ---------------------------------------------------------------------------
 //  end-of-deal flashy dialog
 // ---------------------------------------------------------------------------
 function showEndDialog() {
-  const [won, level] = App.game.score;
+  const won = App.game.wonNS;
   const d = App.curDealData;
-  const made = d && d.contract ? won >= level : true;
+  const sc = d && d.contract ? contractScore(won, d.contract) : null;
+  const made = sc ? sc.made : true;
+  const needed = sc ? sc.needed : 0;
   const word = d && d.contract ? (made ? t("dealWord") : t("failWord")) : t("passWord");
   const wEl = $("endWord");
   wEl.textContent = word;
   wEl.className = "end-word beat " + (made || !d || !d.contract ? "made" : "down");
   const nsL = t("south"), ewL = t("east");
-  // score line: NS took `won`, the contract required `level` tricks.  (We stop
-  // as soon as the result is decided, so `won` is the declarer's final total.)
+  // score line: NS took `won` tricks, the contract required `needed` (=level+6).
+  // (We stop as soon as the result is decided, so `won` is the final total.)
   $("endScore").textContent =
-    nsL + "  " + won + "      " + ewL + "  " + (13 - won) + "      (" + t("endScoreNeeds") + " " + level + ")";
+    nsL + "  " + won + "      " + ewL + "  " + (13 - won) + "      (" + t("endScoreNeeds") + " " + needed + ")";
   const expert = ["Schenker", "Auken", "Horenstein", "Palliser", "Terkelsen"][App.curDeal % 5];
-  // Original semantics: the contract is simply made / defeated; a named expert
-  // rating is awarded only when the contract is made.
   let sub;
   if (!d || !d.contract) sub = t("passOutSub");
-  else if (made) sub = t("madeSub", d.contract.text, won, level) +
-    "   " + t("expert") + ": " + expert;
-  else sub = t("downSub", d.contract.text, won, level);
+  else if (made) {
+    const kl = kindLabel(sc.kind);
+    const bonusTxt = (sc.bonus > 0) ? "  +" + sc.bonus : "";
+    sub = t("madeSub", d.contract.text, won, needed) +
+      (kl ? "   " + kl : "") +
+      "   " + t("points") + ": " + sc.total + bonusTxt +
+      "   " + t("expert") + ": " + expert;
+  } else {
+    sub = t("downSub", d.contract.text, won, needed) + "   " + t("points") + ": -" + sc.penalty;
+  }
   $("endSub").textContent = sub;
 
   // record the result for the TOC marks
@@ -855,9 +964,14 @@ function onBoardClick(ev) {
   const hand = App.game.hands[seat].slice().sort((a, b) =>
     suitSeq(a.s) - suitSeq(b.s) || -a.r + b.r);
   const yH = handY(seat, h, playDims());
-  const x0 = handX(seat, 0, hand.length, w, playDims());
-  for (let i = 0; i < hand.length; i++) {
-    const cx = x0 + i * (pcw + 4);
+  const hs = handStep(hand.length, w, playDims());
+  // phone hands overlap: hit-test right-to-left so the rightmost (most
+  // visible) card under the finger wins.  desktop: cards are spaced, left-to-right.
+  const order = App.phone
+    ? hand.map((_, i) => i).reverse()
+    : hand.map((_, i) => i);
+  for (const i of order) {
+    const cx = hs.x0 + i * hs.step;
     if (x >= cx && x <= cx + pcw && y >= yH && y <= yH + pch) {
       const card = hand[i];
       const idx = App.game.hands[seat].findIndex((c) => sameCard(c, card));
@@ -877,6 +991,8 @@ async function main() {
   App.board = $("board");
   if (!App.board) return;      // e.g. selftest.html has no canvas; skip play UI
   App.ctx = App.board.getContext("2d");
+  // flag the phone mode on <html> so CSS can bump font sizes / button heights
+  document.documentElement.classList.toggle("phone", App.phone);
   window.addEventListener("resize", fitStage);
   fitStage();
   App.board.addEventListener("click", onBoardClick);
@@ -906,13 +1022,121 @@ async function main() {
     const r = await fetch("/api/deals", { cache: "no-cache" });
     data = await r.json();
   } catch (e) {
-    $("status").textContent = t("failedLoad") + ": " + e;
-    return;
+    // Android WebView fallback: page is loaded via file:// so /api/deals may
+    // not resolve.  deals.js (loaded as a <script> in index.html) preloads the
+    // same table into window.__DEALS__.
+    if (window.__DEALS__) {
+      data = window.__DEALS__;
+    } else {
+      $("status").textContent = t("failedLoad") + ": " + e;
+      return;
+    }
   }
   App.data = data;
   buildTOC();
   applyLocaleUI();
   selectLevel(1);
+  // diagnostics for native: expose geometry + load status via document.title
+  // (readable via adb onReceivedTitle).  Lets us confirm the stage actually
+  // renders on-screen without a working screencap.
+  try {
+    const n = data.levels.reduce((a, l) => a + (l.deals ? l.deals.length : 0), 0);
+    const lvbtns = document.querySelectorAll(".lvbtn").length;
+    const rows = document.querySelectorAll(".deal-row").length;
+    const stg = $("stage");
+    const r = stg ? stg.getBoundingClientRect() : null;
+    const tocHidden = $("toc") ? $("toc").classList.contains("hidden") : "?";
+    document.title = "BM2000_OK deals=" + n + " lvbtns=" + lvbtns + " rows=" + rows +
+      " win=" + window.innerWidth + "x" + window.innerHeight +
+      " stage=" + (r ? Math.round(r.width) + "x" + Math.round(r.height) + "@x" + Math.round(r.left) + ",y" + Math.round(r.top) : "?") +
+      " tocHidden=" + tocHidden;
+  } catch (e) { document.title = "BM2000_ERR " + e; }
+
+  // Diagnostics: export the live play-board canvas (real rendered pixels) as
+  // a PNG.  Works only while a deal is open (App.board has content).
+  window.__exportBoard = function() {
+    try {
+      const cv = App.board;
+      if (!cv || !App.game) { document.title = "BOARD_EXPORT no game"; return; }
+      const url = cv.toDataURL("image/png");
+      const b64 = url.split(",")[1];
+      document.title = "BOARD_OK w=" + cv.width + " h=" + cv.height + " bytes=" + b64.length;
+      if (window.AndroidBridge && AndroidBridge.savePng) AndroidBridge.savePng(b64);
+    } catch (e) { document.title = "BOARD_ERR " + e; }
+  };
+
+  // Diagnostics: dump real element geometry (getBoundingClientRect + computed
+  // style) to document.title so we can see whether the TOC is actually laid
+  // out on-screen.  MI 5X screencap can't capture the WebView layer.
+  window.__dumpGeom = function() {
+    try {
+      const pick = (sel) => {
+        const e = document.querySelector(sel);
+        if (!e) return sel + ":MISSING";
+        const r = e.getBoundingClientRect();
+        const cs = getComputedStyle(e);
+        return sel + " {" + Math.round(r.left) + "," + Math.round(r.top) +
+          " " + Math.round(r.width) + "x" + Math.round(r.height) +
+          " disp=" + cs.display + " vis=" + cs.visibility +
+          " op=" + cs.opacity + " ov=" + cs.overflow + "}";
+      };
+      document.title = "GEOM " +
+        pick("#stage") + " | " + pick("#toc") + " | " + pick("#lvcol") + " | " +
+        pick("#dealRows") + " | " + pick(".lvbtn") + " | " + pick("#langbar");
+    } catch (e) { document.title = "GEOM_ERR " + e; }
+  };
+
+  // Diagnostics: render the live #stage to an offscreen canvas and ship the
+  // PNG (base64) back to native.  MI 5X screencap can't capture the WebView
+  // hardware layer, so this is the only reliable way to see what's actually
+  // on screen.  Native calls window.__exportStagePNG() after load.
+  window.__exportStagePNG = function() {
+    try {
+      const stg = $("stage");
+      if (!stg) { document.title = "EXPORT_ERR no stage"; return; }
+      // draw the stage's box (design coords 794x547) scaled 1x to a canvas.
+      // We approximate by drawing the DOM via html2canvas-free manual: instead
+      // we capture by reading computed layout is hard, so use a full-page
+      // foreignObject trick is blocked on file://.  Fallback: draw each deal
+      // row / level button as text onto a canvas so we can OCR it natively.
+      const W = 794, H = 547;
+      const cv = document.createElement("canvas");
+      cv.width = W; cv.height = H;
+      const c = cv.getContext("2d");
+      c.fillStyle = "#f0f0f0"; c.fillRect(0, 0, W, H);
+      // level buttons (left column) -- NodeList -> Array (old WebView quirk)
+      const lvbtns = Array.prototype.slice.call(document.querySelectorAll(".lvbtn"));
+      c.fillStyle = "#0b5d2e"; c.fillRect(4, 4, 108, 547 - 30);
+      c.fillStyle = "#fff"; c.font = "bold 16px sans-serif";
+      lvbtns.forEach((b, i) => {
+        c.fillRect(8, 8 + i * 44, 100, 34);
+        c.fillText(b.textContent || ("LV" + (i + 1)), 12, 8 + i * 44 + 22);
+      });
+      // deal rows (right pane)
+      const rows = Array.prototype.slice.call(document.querySelectorAll(".deal-row"));
+      c.fillStyle = "#fff"; c.fillRect(116, 4, W - 120, H - 26);
+      c.font = "12px monospace";
+      rows.slice(0, 40).forEach((row, i) => {
+        const nm = row.querySelector(".nm"), ct = row.querySelector(".ct");
+        const y = 18 + i * 18;
+        c.fillStyle = (i % 2) ? "#eee" : "#fff"; c.fillRect(116, y - 12, W - 120, 18);
+        c.fillStyle = "#333"; c.fillText(nm ? nm.textContent : "", 124, y);
+        c.fillStyle = "#555"; c.fillText(ct ? ct.textContent : "", 230, y);
+      });
+      c.fillStyle = "#111"; c.font = "11px sans-serif";
+      const st = $("status");
+      c.fillText(st ? st.textContent : "", 6, H - 8);
+      const dataUrl = cv.toDataURL("image/png");
+      // ship base64 (strip the prefix) to native via the bridge
+      const b64 = dataUrl.split(",")[1];
+      document.title = "EXPORT_OK bytes=" + b64.length + " rows=" + rows.length + " lvbtns=" + lvbtns.length;
+      if (window.AndroidBridge && AndroidBridge.savePng) {
+        AndroidBridge.savePng(b64);
+      } else {
+        document.title = "EXPORT_OK_NO_BRIDGE";
+      }
+    } catch (e) { document.title = "EXPORT_ERR " + e; }
+  };
 
   // optional URL hooks for screenshots/automation:
   //   ?level=N&deal=K  (0-based) opens that deal;  &autoplay=1 plays a few

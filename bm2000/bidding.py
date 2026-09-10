@@ -70,24 +70,26 @@ def bid_greater(a: Bid, b: Bid) -> bool:
     return SUIT_RANK[a.suit] > SUIT_RANK[b.suit]
 
 
-def final_contract(bids: List[Bid]):
+def final_contract(auction):
     """Return (declarer_seat, level, suit) for the auction, or None.
 
-    The declarer is the seat that made the highest (final) bid.
+    ``auction`` is a list of ``(seat, Bid)`` pairs (passes have ``Bid.suit == "-"``).
+    The declarer is the *seat* that made the highest (final) bid -- the seat that
+    actually bid the making contract, NOT a position in a pass-stripped list
+    (that was an earlier bug: stripping passes and taking ``index % 4`` gave the
+    wrong seat for every deal).
     """
-    if not bids:
-        return None
     top: Optional[Bid] = None
-    top_i = -1
-    for i, b in enumerate(bids):
-        if b.suit == "-":
+    top_seat = -1
+    for seat, b in auction:
+        if b is None or b.suit == "-":
             continue
         if top is None or bid_greater(b, top):
             top = b
-            top_i = i
-    if top is None or top_i < 0:
+            top_seat = seat % 4
+    if top is None or top_seat < 0:
         return None
-    return top_i % 4, top.level, top.suit
+    return top_seat, top.level, top.suit
 
 
 def opening_hand_score(hand) -> int:

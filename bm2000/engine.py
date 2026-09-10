@@ -169,14 +169,22 @@ DeclarerAI = AI
 
 
 def score_contract(board: "Board", declarer: int) -> Tuple[int, int]:
-    """Return (tricks_won_by_declarer_side, level)."""
+    """Return (tricks_won_by_declarer_side, tricks_required).
+
+    The required trick count is the contract *level + 6* (a 1-level contract
+    needs 7 tricks, a 4-level high-major 10, a 7-level grand slam all 13).
+    """
     partner = (declarer + 2) % 4
     side = {declarer, partner}
     won = sum(1 for trick in board.history if trick[0][0] in side)
     level = board.contract[1] if board.contract else 0
-    return won, level
+    return won, (level + 6) if level else 0
 
 
 def contract_result(won: int, level: int) -> int:
-    """Signed result: positive = makes, negative = number of tricks short."""
-    return won - level
+    """Signed result vs. the contract: positive = makes, negative = short.
+
+    ``level`` is the contract's numeric level (1..7); the contract requires
+    ``level + 6`` tricks, so the result is ``won - (level + 6)``.
+    """
+    return won - (level + 6)
