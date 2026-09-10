@@ -62,6 +62,11 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+      # The default GITHUB_TOKEN is read-only on this (personal) repo, so it
+      # cannot create a release.  Prefer a repository secret RELEASE_TOKEN (a
+      # PAT with repo scope) when one is configured; otherwise fall back to
+      # GITHUB_TOKEN (which works if the repo's Actions permissions are set to
+      # "Read and write" under Settings > Actions > Workflow permissions).
       - name: Create GitHub Release (on tag)
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
@@ -69,4 +74,4 @@ jobs:
           generate_release_notes: true
           files: android/app/build/outputs/apk/debug/*.apk
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
