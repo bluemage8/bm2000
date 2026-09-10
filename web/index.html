@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bridge Master 2000</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="viewport">
+    <div id="stage">
+      <!-- ===== TOC ===== -->
+      <section id="toc" class="view">
+        <div class="lvcol" id="lvcol"></div>
+        <div class="deal-pane">
+          <div class="deal-scroll">
+            <ol class="deal-rows" id="dealRows"></ol>
+          </div>
+        </div>
+        <div id="status" class="status">Loading deals&hellip;</div>
+      </section>
+
+      <!-- ===== PLAY ===== -->
+      <section id="play" class="view hidden">
+        <div class="play-strip" id="playStrip"></div>
+        <div class="board-wrap">
+          <canvas id="board"></canvas>
+        </div>
+        <div class="narr" id="narr"></div>
+        <div class="toolbar" id="toolbar"></div>
+      </section>
+    </div>
+  </div>
+
+  <!-- end-of-deal flashy dialog -->
+  <div id="endModal" class="modal hidden">
+    <div class="dlg">
+      <div id="endWord" class="end-word">DEAL</div>
+      <div id="endScore" class="end-score"></div>
+      <div id="endSub" class="end-sub"></div>
+      <div class="end-btns">
+        <button id="btnRestart" class="eb restart">Restart deal</button>
+        <button id="btnAnswer" class="eb answer">Show answer</button>
+        <button id="btnNext" class="eb next">Next deal</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

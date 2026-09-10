@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local / tooling artifacts
+analysis/
+tests/
+play.txt
+shot*.png
+web/shot*.png
+web/_srv_*.txt
+web/server.out
+web/server.err
+*.log
+
+# Python environments
+.venv/
+venv/
+env/
+
+# The original binary is proprietary and is intentionally NOT in this repo.
+*.exe
+
+# OS noise
+Thumbs.db
+.DS_Store

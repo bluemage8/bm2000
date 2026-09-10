@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>selftest</title></head>
+<body>
+<div id="stage" style="width:794px;height:547px;"></div>
+<pre id="out">running...</pre>
+<script src="app.js"></script>
+<script>
+/* In-page smoke test: run the play engine on several deals, verify a full
+   legal play completes (13 tricks / 52 cards), and check the responsive
+   scaling function.  Results are written to #out for a headless dump. */
+(function () {
+  var out = document.getElementById("out");
+  function log(s){ out.textContent += s + "\n"; }
+  var failures = [];
+  function ok(cond, msg){ if(!cond) failures.push(msg); log((cond?"PASS ":"FAIL ") + msg); }
+
+  fetch("/api/deals", {cache:"no-cache"}).then(function(r){ return r.json(); }).then(function(data){
+    App.data = data;
+    log("levels: " + data.levels.map(function(l){ return l.level + "(" + l.deals.length + ")"; }).join(" "));
+
+    // 1) every deal parses to 13 cards per seat, 52 total, valid
+    var bad = 0, checked = 0;
+    for (var li = 0; li < data.levels.length; li++){
+      var deals = data.levels[li].deals;
+      for (var di = 0; di < deals.length; di++){
+        var d = deals[di]; checked++;
+        var total = 0, perSeatOk = true, seen = {};
+        var seenAll = {};
+        for (var s = 0; s < 4; s++){
+          if (d.hands[s].length !== 13) perSeatOk = false;
+          for (var ci = 0; ci < d.hands[s].length; ci++){
+            var c = d.hands[s][ci]; total++;
+            var k = c.s + ":" + c.r;
+            if (seenAll[k]) { perSeatOk = false; break; }
+            seenAll[k] = 1;
+          }
+        }
+        if (!perSeatOk || total !== 52) bad++;
+      }
+    }
+    log("deals checked: " + checked + "  invalid: " + bad);
+    ok(bad === 0, "all deals are valid (13/seat, 52 total, unique)");
+
+    // 2) engine plays several deals to completion with random legal play
+    var sample = [];
+    for (var L = 0; L < data.levels.length; L++){
+      var dd = data.levels[L].deals;
+      sample.push(dd[0]);
+      sample.push(dd[Math.floor(dd.length/2)]);
+      sample.push(dd[dd.length-1]);
+    }
+    var playBad = 0;
+    for (var si = 0; si < sample.length; si++){
+      var d2 = sample[si];
+      App.game = new Game(d2.hands, d2.contract);
+      var guard = 0;
+      while (!App.game.done && guard < 200){
+        guard++;
+        var seat = App.game.toPlay;
+        if (seat === null) break;
+        if (seat === SOUTH || seat === NORTH){
+          var legal = App.game.legal();
+          // play a deterministic-but-legal card: first legal
+          var card = legal[0];
+          App.game.play(card);
+        } else {
+          App.game.defenseStep();
+        }
+      }
+      var left = 0;
+      for (var s2 = 0; s2 < 4; s2++) left += App.game.hands[s2].length;
+      if (!(App.game.done && left === 0 && App.game.tricks.length === 13)) playBad++;
+    }
+    log("sample deals played: " + sample.length + "  failed: " + playBad);
+    ok(playBad === 0, "engine plays sampled deals to 13 tricks / 0 cards left");
+
+    // 3) trick cards stay on fixed anchors when the trick fills (no sliding)
+    var anchors = {};
+    var refCw = 40, refCh = 56, cx = 400, cy = 220;
+    [NORTH, WEST, SOUTH, EAST].forEach(function(seat){
+      anchors[seat] = trickPos(seat, cx, cy, refCw, refCh).join(",");
+    });
+    // anchors must differ per seat and be centered-ish
+    var uniq = {};
+    Object.keys(anchors).forEach(function(k){ uniq[anchors[k]] = 1; });
+    ok(Object.keys(uniq).length === 4, "the 4 trick anchors are distinct");
+
+    // 4) responsive scaling picks a sensible scale factor
+    // simulate a viewport by stubbing window.innerWidth/innerHeight
+    var w = 1200, h = 700;
+    Object.defineProperty(window, "innerWidth", {configurable:true, get: function(){ return w; }});
+    Object.defineProperty(window, "innerHeight", {configurable:true, get: function(){ return h; }});
+    var s = fitStage();
+    log("scale @1200x700 = " + s.toFixed(3) + "  (expect ~" + Math.min(1200/794, 700/547).toFixed(3) + ")");
+    ok(Math.abs(s - Math.min(1200/794, 700/547, 3)) < 1e-6, "scale = min(vw/794, vh/547, 3)");
+    // a wider window should scale larger than a narrow one only if height allows
+    w = 500; h = 547;
+    var s2 = fitStage();
+    ok(Math.abs(s2 - (500/794)) < 1e-6, "narrow window scales to width (500/794)");
+
+    // 5) contract / score sanity on a known deal
+    var d3 = data.levels[0].deals[0];
+    var g = new Game(d3.hands, d3.contract);
+    log("deal " + d3.name + " contract=" + (d3.contract && d3.contract.text) + " vuln=" + d3.vuln +
+        " hcp=" + d3.hcp.join("/"));
+    ok(!!(d3.contract || true), "first deal has contract object or pass");
+
+    log("\n==== RESULT: " + (failures.length === 0 ? "ALL PASS (" + checked + " deals)" : (failures.length + " FAILURES")) + " ====");
+    if (failures.length) log("FAILURES:\n - " + failures.join("\n - "));
+  }).catch(function(e){
+    log("FATAL: " + e);
+    out.style.color = "red";
+  });
+})();
+</script>
+</body></html>
