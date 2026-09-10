@@ -1,4 +1,4 @@
-﻿# BridgeMaster2000 (bm2000) -- Bridge Master 2000
+# BridgeMaster2000 (bm2000) -- Bridge Master 2000
 
 [**简体中文 / Chinese**](README_ZH.md)  ·  English
 
