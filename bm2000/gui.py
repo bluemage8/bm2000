@@ -723,11 +723,14 @@ class App:
             big = "PASS"
         else:
             big = "DEAL" if made else "FAILED"
+            # original semantics: the contract is simply made/down; the score
+            # line carries the "took X of Y" detail, and a named expert rating
+            # is awarded only when the contract is made.
             if made:
-                sub = "%s  made by %d.   Expert rating: %s" % (
-                    contract, won - level, expert or "")
+                sub = "%s  made  (%d of %d tricks won).   Expert rating: %s" % (
+                    contract, won, level, expert or "")
             else:
-                sub = "%s  down by %d." % (contract, level - won)
+                sub = "%s  down  (%d of %d tricks won)." % (contract, won, level)
         self._flash_end_dialog(big, sub, won, level, made)
 
     def _flash_end_dialog(self, big: str, sub: str, won: int, level: int,
