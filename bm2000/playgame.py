@@ -181,6 +181,22 @@ class PlayState:
             return True
         return self.won_ns >= self.contract[1]
 
+    @property
+    def decided(self) -> bool:
+        """Bridge Master ends the hand as soon as the result is settled (HLP:
+        play is interrupted before all 13 tricks once North+South have reached
+        the contract's trick goal, or once it is impossible for them to make it
+        even by winning every remaining trick)."""
+        level = self.contract[1] if self.contract else 0
+        if level <= 0:
+            return len(self.tricks) >= 13
+        if self.won_ns >= level:
+            return True
+        remaining = 13 - len(self.tricks)
+        if self.won_ns + remaining < level:
+            return True
+        return False
+
     # -- actions ------------------------------------------------------------ #
     def play(self, card: Card) -> Optional[int]:
         """Play `card` for the seat to move.  Returns the trick winner (or None
@@ -197,9 +213,8 @@ class PlayState:
                 self.won_ns += 1
             self.leader = winner
             self.trick = []
-            if len(self.tricks) == 13:
+            if len(self.tricks) == 13 or self.decided:
                 self.done = True
-                return winner
             return winner
         return None
 
