@@ -49,10 +49,8 @@ const I18N = {
     dealWord: "DEAL", failWord: "FAILED", passWord: "PASS",
     endScoreNeeds: "contract needs",
     passOutSub: "Pass out — no contract reached.",
-    madeSub: "made on",           // "…made on +N tricks"
-    downSub: "down by",           // "…down by N tricks"
-    over: (by, won, lv) => by > 0 ? (by + " over  (took " + won + ")") : ("made  (took " + won + ")"),
-    under: (lv, won) => lv > won ? ("by " + (lv - won) + "  (took " + won + ")") : "made  (took " + won + ")",
+    madeSub: (txt, won, lv) => txt + " made  (" + won + " of " + lv + " tricks won)",
+    downSub: (txt, won, lv) => txt + " down  (" + won + " of " + lv + " tricks won)",
     expert: "Expert rating",
     restart: "Restart deal", showAnswer: "Show answer", nextDeal: "Next deal",
   },
@@ -79,10 +77,8 @@ const I18N = {
     dealWord: "完成", failWord: "未成", passWord: "Pass",
     endScoreNeeds: "需",
     passOutSub: "Pass — 未叫成定约。",
-    madeSub: "完成于",             // "…完成于 N 墩"
-    downSub: "差",                 // "…差 N 墩"
-    over: (by, won, lv) => by > 0 ? ("超 " + by + " 墩（共 " + won + " 墩）") : ("达成（共 " + won + " 墩）"),
-    under: (lv, won) => lv > won ? ("差 " + (lv - won) + " 墩（共 " + won + " 墩）") : "达成（共 " + won + " 墩）",
+    madeSub: (txt, won, lv) => txt + " 完成（拿到 " + won + " 墩，需 " + lv + " 墩）",
+    downSub: (txt, won, lv) => txt + " 未成（拿到 " + won + " 墩，需 " + lv + " 墩）",
     expert: "专家评分",
     restart: "重新开始", showAnswer: "显示答案", nextDeal: "下一副",
   },
@@ -99,7 +95,13 @@ function detectLocale(urlLang, storage, navLang) {
   if (urlLang === undefined) {
     try { urlLang = new URLSearchParams(location.search).get("lang"); } catch (e) {}
   }
-  if (urlLang) { const k = String(urlLang).toLowerCase(); if (I18N[k]) return k; }
+  if (urlLang) {
+    const k = String(urlLang).toLowerCase();
+    // accept full locale tags ("en-US", "zh-CN") as well as bare codes ("en")
+    if (I18N[k]) return k;
+    const sub = k.split("-")[0];
+    if (I18N[sub]) return sub;
+  }
   // 2. saved choice from a previous session
   if (storage === undefined) {
     try { storage = localStorage.getItem("bm2000.lang"); } catch (e) {}
@@ -260,6 +262,22 @@ class Game {
   get toPlay() { return this.done ? null : (this.leader + this.trick.length) % 4; }
   get tricksPlayed() { return this.tricks.length; }
   get score() { const lvl = this.contract ? this.contract.level : 0; return [this.wonNS, lvl]; }
+  get needs() { return this.contract ? this.contract.level : 0; }
+  // Bridge Master stops as soon as the result is decided (HLP: play is
+  // interrupted before all 13 tricks once "the defenders win enough tricks so
+  // that it is impossible for declarer to win the optimum number of tricks,
+  // OR if declarer has reached the goal of the contract").  So end when:
+  //   * North+South already took `needs` tricks  -> contract made, stop;
+  //   * even winning every remaining trick can no longer reach `needs` -> down;
+  //   * all 13 tricks are played.
+  get decided() {
+    const need = this.needs;
+    if (need <= 0) return this.tricks.length >= 13;
+    if (this.wonNS >= need) return true;
+    const remaining = 13 - this.tricks.length;
+    if (this.wonNS + remaining < need) return true;   // can no longer make it
+    return false;
+  }
   legal() {
     const seat = this.toPlay;
     if (seat === null) return [];
@@ -279,7 +297,7 @@ class Game {
       if (sideOf(winner) === 0) this.wonNS++;
       this.leader = winner;
       this.trick = [];
-      if (this.tricks.length === 13) this.done = true;
+      if (this.tricks.length === 13 || this.decided) this.done = true;
       return winner;
     }
     return null;
@@ -794,15 +812,18 @@ function showEndDialog() {
   wEl.textContent = word;
   wEl.className = "end-word beat " + (made || !d || !d.contract ? "made" : "down");
   const nsL = t("south"), ewL = t("east");
+  // score line: NS took `won`, the contract required `level` tricks.  (We stop
+  // as soon as the result is decided, so `won` is the declarer's final total.)
   $("endScore").textContent =
     nsL + "  " + won + "      " + ewL + "  " + (13 - won) + "      (" + t("endScoreNeeds") + " " + level + ")";
   const expert = ["Schenker", "Auken", "Horenstein", "Palliser", "Terkelsen"][App.curDeal % 5];
+  // Original semantics: the contract is simply made / defeated; a named expert
+  // rating is awarded only when the contract is made.
   let sub;
   if (!d || !d.contract) sub = t("passOutSub");
-  else if (made || won >= level) sub = t("madeSub") + " " + d.contract.text + " " +
-    t("over", won - level, won, level) + "   " + t("expert") + ": " + expert;
-  else sub = t("downSub") + " " + (level - won) + "   (" + d.contract.text + " " +
-    t("under", level, won) + ")";
+  else if (made) sub = t("madeSub", d.contract.text, won, level) +
+    "   " + t("expert") + ": " + expert;
+  else sub = t("downSub", d.contract.text, won, level);
   $("endSub").textContent = sub;
 
   // record the result for the TOC marks
