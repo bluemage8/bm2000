@@ -45,11 +45,14 @@ const I18N = {
     yourSide: "your side", defense: "the defense",
     movieCap: (c, t) => "Bridge movie  [" + (c + 1) + "/" + t + "]",
     movieEnd: "End of the bridge movie.",
+    englishNote: "(Expert narration is provided in English.)",
     dealWord: "DEAL", failWord: "FAILED", passWord: "PASS",
     endScoreNeeds: "contract needs",
     passOutSub: "Pass out — no contract reached.",
-    madeSub: (txt, by) => txt + "  made by " + by + ".",
-    downSub: (txt, by) => txt + "  down by " + by + ".",
+    madeSub: "made on",           // "…made on +N tricks"
+    downSub: "down by",           // "…down by N tricks"
+    over: (by, won, lv) => by > 0 ? (by + " over  (took " + won + ")") : ("made  (took " + won + ")"),
+    under: (lv, won) => lv > won ? ("by " + (lv - won) + "  (took " + won + ")") : "made  (took " + won + ")",
     expert: "Expert rating",
     restart: "Restart deal", showAnswer: "Show answer", nextDeal: "Next deal",
   },
@@ -72,11 +75,14 @@ const I18N = {
     yourSide: "我方", defense: "防守方",
     movieCap: (c, t) => "桥牌讲解  [" + (c + 1) + "/" + t + "]",
     movieEnd: "讲解结束。",
+    englishNote: "（专家讲解以英文提供。）",
     dealWord: "完成", failWord: "未成", passWord: "Pass",
-    endScoreNeeds: "定约需",
+    endScoreNeeds: "需",
     passOutSub: "Pass — 未叫成定约。",
-    madeSub: (txt, by) => txt + "  " + by + " 墩。",
-    downSub: (txt, by) => txt + "  差 " + by + " 墩。",
+    madeSub: "完成于",             // "…完成于 N 墩"
+    downSub: "差",                 // "…差 N 墩"
+    over: (by, won, lv) => by > 0 ? ("超 " + by + " 墩（共 " + won + " 墩）") : ("达成（共 " + won + " 墩）"),
+    under: (lv, won) => lv > won ? ("差 " + (lv - won) + " 墩（共 " + won + " 墩）") : "达成（共 " + won + " 墩）",
     expert: "专家评分",
     restart: "重新开始", showAnswer: "显示答案", nextDeal: "下一副",
   },
@@ -105,10 +111,16 @@ function detectLocale(urlLang, storage, navLang) {
 }
 function lang() { return I18N[App.lang] || I18N.en; }
 // tAt(key, loc) resolves `key` in an explicit locale -- handy for tests/shots
-function tAt(key, loc) { const d = I18N[loc] || I18N.en; const v = d[key]; return v; }
-function t(key) { const v = lang()[key]; return typeof v === "function" ? v : (v !== undefined ? v : key); }
+function tAt(key, loc) { const d = I18N[loc] || I18N.en; return d[key]; }
+// t(key, ...args) resolves a string; if the entry is a function (a template) the
+// args are passed through, e.g. t("over", 3, 10, 7).
+function t(key) {
+  const v = lang()[key];
+  if (typeof v === "function") { var a = Array.prototype.slice.call(arguments, 1); return v.apply(null, a); }
+  return v !== undefined ? v : key;
+}
 // a function-valued string that also needs a fallback param (e.g. t("tocStatus", 5))
-function tf(key, arg) { const v = lang()[key]; return typeof v === "function" ? v(arg) : v; }
+function tf(key) { var a = Array.prototype.slice.call(arguments, 0); return t.apply(null, a); }
 const seatLabel = (i) => [t("south"), t("west"), t("north"), t("east")][i];
 function setLocale(l, persist) {
   if (!I18N[l]) return;
@@ -757,9 +769,12 @@ function renderNarr() {
   if (App.collectingWinner !== null) return;       // keep the "collecting..." line
   if (App.movieMode) {
     const total = App.narrPages.length;
-    const cur = Math.min(App.moviePage, total - 1);
+    const cur = Math.min(App.moviePage, Math.max(0, total - 1));
+    // the expert captions come from the original deck data in English; when the
+    // UI is in another language, say so so the user isn't confused.
+    const note = (App.lang !== "en" && App.narrPages.length) ? "\n" + t("englishNote") : "";
     $("narr").textContent = total
-      ? t("movieCap", cur, total) + "\n" + App.narrPages[cur]
+      ? t("movieCap", cur, total) + "\n" + App.narrPages[cur] + note
       : t("movieEnd");
     return;
   }
@@ -784,9 +799,10 @@ function showEndDialog() {
   const expert = ["Schenker", "Auken", "Horenstein", "Palliser", "Terkelsen"][App.curDeal % 5];
   let sub;
   if (!d || !d.contract) sub = t("passOutSub");
-  else if (made) sub = t("madeSub", d.contract.text, (won - level)) +
-    "   " + t("expert") + ": " + expert;
-  else sub = t("downSub", d.contract.text, (level - won));
+  else if (made || won >= level) sub = t("madeSub") + " " + d.contract.text + " " +
+    t("over", won - level, won, level) + "   " + t("expert") + ": " + expert;
+  else sub = t("downSub") + " " + (level - won) + "   (" + d.contract.text + " " +
+    t("under", level, won) + ")";
   $("endSub").textContent = sub;
 
   // record the result for the TOC marks
