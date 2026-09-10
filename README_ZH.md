@@ -1,4 +1,4 @@
-# 桥牌大师 2000 (Bridge Master 2000, bm2000)
+﻿# BridgeMaster2000 (bm2000) -- 桥牌大师 2000
 
 [English](README.md)  ·  **简体中文 / Chinese**
 
