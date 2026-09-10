@@ -3,10 +3,16 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Bridge Master 2000 — a faithful web re-implementation of the classic bridge game">
   <title>Bridge Master 2000</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
+  <div id="langbar">
+    <button id="langEn" class="langbtn" onclick="App.data && setLocale('en')">EN</button>
+    <button id="langZh" class="langbtn" onclick="App.data && setLocale('zh')">中文</button>
+  </div>
+
   <div id="viewport">
     <div id="stage">
       <!-- ===== TOC ===== -->
@@ -17,7 +23,7 @@
             <ol class="deal-rows" id="dealRows"></ol>
           </div>
         </div>
-        <div id="status" class="status">Loading deals&hellip;</div>
+        <div id="status" class="status" data-i18n="loading">Loading deals&hellip;</div>
       </section>
 
       <!-- ===== PLAY ===== -->
@@ -39,9 +45,9 @@
       <div id="endScore" class="end-score"></div>
       <div id="endSub" class="end-sub"></div>
       <div class="end-btns">
-        <button id="btnRestart" class="eb restart">Restart deal</button>
-        <button id="btnAnswer" class="eb answer">Show answer</button>
-        <button id="btnNext" class="eb next">Next deal</button>
+        <button id="btnRestart" class="eb restart" data-i18n="restart">Restart deal</button>
+        <button id="btnAnswer" class="eb answer" data-i18n="showAnswer">Show answer</button>
+        <button id="btnNext" class="eb next" data-i18n="nextDeal">Next deal</button>
       </div>
     </div>
   </div>

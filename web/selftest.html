@@ -105,6 +105,20 @@
         " hcp=" + d3.hcp.join("/"));
     ok(!!(d3.contract || true), "first deal has contract object or pass");
 
+    // 6) i18n: en/zh dictionaries differ, auto-detect maps locale->lang, and
+    //    translating a key in each locale resolves the right string.
+    ok(I18N.en.pageTitle !== I18N.zh.pageTitle, "i18n en/zh differ (pageTitle)");
+    ok(tAt("seatDealer", "zh") === "SOUTH  (declarer, you)", "i18n en seat label");
+    ok(/南/.test(tAt("seatDealer", "zh")), "i18n zh seat label = 南…");
+    ok(detectLocale("zh-CN") === "zh" && detectLocale("en-US") === "en",
+        "i18n auto-detect maps zh*->zh, en*->en");
+    ok(tAt("south", "zh") === "南" && tAt("south", "en") === "South",
+        "i18n seatLabel south = 南 / South");
+    ok(tAt("replay", "zh") === "Replay" && tAt("movie", "zh") === "Movie",
+        "i18n toolbar strings (zh) present");
+    ok(tAt("dealWord", "zh") === "DEAL" && tAt("nextDeal", "zh") === "下一副",
+        "i18n end-dialog strings (zh) present");
+
     log("\n==== RESULT: " + (failures.length === 0 ? "ALL PASS (" + checked + " deals)" : (failures.length + " FAILURES")) + " ====");
     if (failures.length) log("FAILURES:\n - " + failures.join("\n - "));
   }).catch(function(e){

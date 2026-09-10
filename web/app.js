@@ -22,6 +22,105 @@ const LEVEL_COLORS = ["#cc2222","#22aa22","#2244cc","#ccaa00","#aa22aa"];
 const FELT = "#0b5d2e", FELT_EDGE = "#063d1e";
 
 // ---------------------------------------------------------------------------
+//  i18n -- auto-detected from the browser/terminal language, with a manual
+//  EN / 中文 override (saved to localStorage and reflected in the URL ?lang=)
+// ---------------------------------------------------------------------------
+const I18N = {
+  en: {
+    pageTitle: "Bridge Master 2000",
+    south: "South", west: "West", north: "North", east: "East",
+    seatDummy: "NORTH  (dummy, you)", seatDealer: "SOUTH  (declarer, you)",
+    seatDef: "  (defense)",
+    level: "Level",
+    loading: "Loading deals…",
+    failedLoad: "Failed to load deals",
+    tocStatus: (n) => "Lv " + n + ": ",              // + " 530 deals. Click a deal to play."
+    tocStatusDeals: " deals. Click a deal to play.",
+    pass: "Pass",
+    replay: "Replay", takeback: "Take back", step: "Step", claim: "Claim",
+    movie: "Movie", bigBtn: "Big", smallBtn: "Small",
+    by: "by", passout: "Pass out", vuln: "Vuln", hcp: "HCP", trick: "Trick",
+    win: "WIN",
+    takes: (seat, side) => seat + " takes the trick (" + side + ") — collecting…",
+    yourSide: "your side", defense: "the defense",
+    movieCap: (c, t) => "Bridge movie  [" + (c + 1) + "/" + t + "]",
+    movieEnd: "End of the bridge movie.",
+    dealWord: "DEAL", failWord: "FAILED", passWord: "PASS",
+    endScoreNeeds: "contract needs",
+    passOutSub: "Pass out — no contract reached.",
+    madeSub: (txt, by) => txt + "  made by " + by + ".",
+    downSub: (txt, by) => txt + "  down by " + by + ".",
+    expert: "Expert rating",
+    restart: "Restart deal", showAnswer: "Show answer", nextDeal: "Next deal",
+  },
+  zh: {
+    pageTitle: "桥牌大师 2000",
+    south: "南", west: "西", north: "北", east: "东",
+    seatDummy: "北  (明手·你)", seatDealer: "南  (庄·你)",
+    seatDef: " (防守)",
+    level: "第",
+    loading: "正在加载牌局…",
+    failedLoad: "加载牌局失败",
+    tocStatus: (n) => "第" + n + "级：",
+    tocStatusDeals: " 副。点击一副牌开始。",
+    pass: "Pass",
+    replay: "重放", takeback: "悔棋", step: "单步", claim: "摊牌",
+    movie: "讲解", bigBtn: "放大", smallBtn: "缩小",
+    by: "由", passout: "Pass", vuln: "局况", hcp: "大牌", trick: "墩",
+    win: "赢",
+    takes: (seat, side) => seat + " 拿下这墩（" + side + "）— 收集中…",
+    yourSide: "我方", defense: "防守方",
+    movieCap: (c, t) => "桥牌讲解  [" + (c + 1) + "/" + t + "]",
+    movieEnd: "讲解结束。",
+    dealWord: "完成", failWord: "未成", passWord: "Pass",
+    endScoreNeeds: "定约需",
+    passOutSub: "Pass — 未叫成定约。",
+    madeSub: (txt, by) => txt + "  " + by + " 墩。",
+    downSub: (txt, by) => txt + "  差 " + by + " 墩。",
+    expert: "专家评分",
+    restart: "重新开始", showAnswer: "显示答案", nextDeal: "下一副",
+  },
+};
+
+let App = {};    // declared later (const App = {...}); i18n just needs a home for `lang`
+
+// auto-detect the locale.  Priority: explicit ?lang=  >  saved choice
+// (localStorage)  >  browser language.  Optional overrides (urlLang / storage /
+// navLang) let tests / headless shots pin the result; with none supplied it
+// reads the live page.  (URL always wins, so a shared link forces its language.)
+function detectLocale(urlLang, storage, navLang) {
+  // 1. explicit ?lang= (or the test override) wins
+  if (urlLang === undefined) {
+    try { urlLang = new URLSearchParams(location.search).get("lang"); } catch (e) {}
+  }
+  if (urlLang) { const k = String(urlLang).toLowerCase(); if (I18N[k]) return k; }
+  // 2. saved choice from a previous session
+  if (storage === undefined) {
+    try { storage = localStorage.getItem("bm2000.lang"); } catch (e) {}
+  }
+  if (storage && I18N[storage]) return storage;
+  // 3. the browser / terminal language (auto-switch)
+  const nav = (navLang || navigator.language || navigator.userLanguage || "en").toLowerCase();
+  return nav.indexOf("zh") === 0 ? "zh" : "en";
+}
+function lang() { return I18N[App.lang] || I18N.en; }
+// tAt(key, loc) resolves `key` in an explicit locale -- handy for tests/shots
+function tAt(key, loc) { const d = I18N[loc] || I18N.en; const v = d[key]; return v; }
+function t(key) { const v = lang()[key]; return typeof v === "function" ? v : (v !== undefined ? v : key); }
+// a function-valued string that also needs a fallback param (e.g. t("tocStatus", 5))
+function tf(key, arg) { const v = lang()[key]; return typeof v === "function" ? v(arg) : v; }
+const seatLabel = (i) => [t("south"), t("west"), t("north"), t("east")][i];
+function setLocale(l, persist) {
+  if (!I18N[l]) return;
+  App.lang = l;
+  if (persist !== false) { try { localStorage.setItem("bm2000.lang", l); } catch (e) {} }
+  const e = $("langEn"); if (e) e.classList.toggle("on", l === "en");
+  const z = $("langZh"); if (z) z.classList.toggle("on", l === "zh");
+  if (App.data && !App.game) { buildTOC(); selectLevel(App.curLevel || 1); }
+  render();
+}
+
+// ---------------------------------------------------------------------------
 //  small DOM helpers
 // ---------------------------------------------------------------------------
 const $ = (id) => document.getElementById(id);
@@ -127,14 +226,17 @@ function defenseFollow(seat, hand, trick, trump) {
   return [...hand].sort((a, b) => a.r - b.r || a.s - b.s)[0];
 }
 
-// a card is identified by rank+suit
-const C = (r, s) => ({ r, s });
-function sameCard(a, b) { return a.r === b.r && a.s === b.s; }
+// a card is uniquely identified by its _id (two cards can share rank+suit in
+// the data, so r+s alone is NOT a safe identity).
+const C = (r, s) => ({ r, s, _id: Math.random().toString(36).slice(2) });
+function sameCard(a, b) { return !!a && !!b && (a._id !== undefined ? a._id === b._id : a.r === b.r && a.s === b.s); }
 
 class Game {
   constructor(hands, contract) {
-    // hands: [ [ {r,s} x13 ] x4 ] already in display order; deep-copy
-    this.hands = hands.map((h) => h.map((c) => ({ ...c })));
+    // hands: [ [ {r,s} x13 ] x4 ] already in display order; deep-copy.
+    // Each card gets a unique _id so two cards that share rank+suit (possible
+    // in the data) are still distinct objects -- identity is by _id, not r+s.
+    this.hands = hands.map((h) => h.map((c) => ({ r: c.r, s: c.s, _id: Math.random().toString(36).slice(2) })));
     this.contract = contract;
     this.trump = trumpOf(contract);
     this.leader = WEST;           // the defense leads into dummy
@@ -174,7 +276,9 @@ class Game {
     const seat = this.toPlay;
     if (seat === null || seat === SOUTH || seat === NORTH) return null;
     const card = defenseFollow(seat, this.hands[seat], this.trick, this.trump);
-    return this.play(card);
+    // resolve to the actual hand object (unique id) so play() updates the right one
+    const real = this.hands[seat].find((c) => sameCard(c, card)) || card;
+    return this.play(real);
   }
 }
 
@@ -219,7 +323,8 @@ function drawBack(ctx, x, y, w, h) {
 // ---------------------------------------------------------------------------
 //  app state
 // ---------------------------------------------------------------------------
-const App = {
+App = {
+  lang: detectLocale(),
   data: null,
   curLevel: 0,
   curDeal: -1,
@@ -245,7 +350,7 @@ function buildTOC() {
   const lvcol = $("lvcol");
   lvcol.innerHTML = "";
   App.data.levels.forEach((lv) => {
-    const b = el("button", "lvbtn", "Level " + lv.level);
+    const b = el("button", "lvbtn", t("level") + lv.level);
     b.style.background = colorOf(lv.level);
     b.onclick = () => selectLevel(lv.level);
     lvcol.appendChild(b);
@@ -266,7 +371,7 @@ function selectLevel(level) {
     const code = lv.series + "-" + (i + 1);
     const row = el("li", "deal-row",
       '<span class="nm">' + code + '</span>' +
-      '<span class="ct">' + (d.contract ? d.contract.text : "Pass") + '</span>' +
+      '<span class="ct">' + (d.contract ? d.contract.text : t("pass")) + '</span>' +
       '<span class="mk"></span>');
     const key = level + ":" + i;
     const r = App.results[key];
@@ -276,8 +381,7 @@ function selectLevel(level) {
     rows.appendChild(row);
   });
   setTocVisible(true);
-  $("status").textContent = "Level " + level + ": " + lv.deals.length +
-    " deals. Click a deal to play.";
+  $("status").textContent = tf("tocStatus", level) + lv.deals.length + t("tocStatusDeals");
 }
 
 function setTocVisible(v) {
@@ -333,12 +437,12 @@ function buildToolbar() {
     tb.appendChild(b);
     return b;
   };
-  mk("Replay", () => { const g = App.game; g = resetGame(); }, false);
-  mk("Take back", undo, false);
-  mk("Step", stepForward, false);
-  mk("Claim", claim, false);
-  mk("Movie", toggleMovie, App.movieMode);
-  mk(App.big ? "Small" : "Big", toggleCardSize, false);
+  mk(t("replay"), () => { const g = App.game; g = resetGame(); }, false);
+  mk(t("takeback"), undo, false);
+  mk(t("step"), stepForward, false);
+  mk(t("claim"), claim, false);
+  const mv = mk(t("movie"), toggleMovie, App.movieMode); mv.id = "tbMovie";
+  const bs = mk(App.big ? t("smallBtn") : t("bigBtn"), toggleCardSize, false); bs.id = "tbBig";
 }
 
 function resetGame() {
@@ -386,9 +490,8 @@ function claim() {
 
 function toggleCardSize() {
   App.big = !App.big;
-  // relabel the Big/Small button (toolbar index 5)
-  const tb = $("toolbar");
-  if (tb && tb.children[5]) tb.children[5].textContent = App.big ? "Small" : "Big";
+  const bs = $("tbBig");   // relabel the Big/Small button
+  if (bs) bs.textContent = App.big ? t("smallBtn") : t("bigBtn");
   render();
 }
 
@@ -396,10 +499,10 @@ function toggleMovie() {
   App.movieMode = !App.movieMode;
   if (App.movieMode)   App.moviePage = 0;
   render();
-  const b = $("toolbar").children[4];   // "Movie" button
-  if (b) b.classList.toggle("on", App.movieMode);
+  movieBtn();
   if (App.movieMode) movieAutoNext();
 }
+const movieBtn = () => { const b = $("tbMovie"); if (b) b.classList.toggle("on", App.movieMode); };
 
 function movieAutoNext() {
   if (!App.movieMode) return;
@@ -456,8 +559,8 @@ function lastTrickWinner() {
 function collectedLine() {
   const w = lastTrickWinner();
   if (w === null) return "";
-  const side = (w === SOUTH || w === NORTH) ? "your side" : "the defense";
-  return SEAT_NAMES[w] + " takes the trick (" + side + ") -- collecting\u2026";
+  const side = (w === SOUTH || w === NORTH) ? t("yourSide") : t("defense");
+  return t("takes", seatLabel(w), side);
 }
 
 function finishCollect() {
@@ -540,8 +643,8 @@ function render() {
 
   // seat name labels
   const names = {
-    [NORTH]: "NORTH  (dummy, you)", [SOUTH]: "SOUTH  (declarer, you)",
-    [WEST]: "WEST  (defense)", [EAST]: "EAST  (defense)"
+    [NORTH]: t("seatDummy"), [SOUTH]: t("seatDealer"),
+    [WEST]: t("west") + t("seatDef"), [EAST]: t("east") + t("seatDef")
   };
   const pos = {
     [NORTH]: [w / 2, 6, "center"], [SOUTH]: [w / 2, h - 6, "center"],
@@ -611,7 +714,7 @@ function render() {
         ctx.fillStyle = "#ffd24a";
         ctx.font = "bold 9px Arial, sans-serif";
         ctx.textAlign = "center"; ctx.textBaseline = "bottom";
-        ctx.fillText("WIN", tx + pcw / 2, ty - 2);
+        ctx.fillText(t("win"), tx + pcw / 2, ty - 2);
       }
     }
   }
@@ -632,18 +735,18 @@ function render() {
 function stripHtml(won, ew, cur) {
   const d = App.curDealData;
   if (!d) return "";
-  const contract = d.contract ? (d.contract.text + "  (by " +
-    SEAT_NAMES[d.contract.seat] + ")") : "Pass out";
-  const vuln = d.contract ? ('<span class="vuln">&nbsp;&nbsp;Vuln: ' + vulnText(d.vuln) + "</span>") : "";
-  const hcp = '<span class="vuln">&nbsp;&nbsp;HCP&nbsp; S:' + d.hcp[0] + "  N:" + d.hcp[2] + "</span>";
+  const contract = d.contract ? (d.contract.text + "  (" + t("by") + " " +
+    seatLabel(d.contract.seat) + ")") : t("passout");
+  const vuln = d.contract ? ('<span class="vuln">&nbsp;&nbsp;' + t("vuln") + ": " + vulnText(d.vuln) + "</span>") : "";
+  const hcp = '<span class="vuln">&nbsp;&nbsp;' + t("hcp") + '&nbsp; S:' + d.hcp[0] + "  N:" + d.hcp[2] + "</span>";
   const auction = d.auction.map((x) => x.bid).join("   ");
   return '<div class="row row-score">' +
-           '<span class="ns">NS&nbsp;' + won + "</span>" +
-           '&nbsp;&nbsp;&nbsp;<span class="ew">EW&nbsp;' + ew + "</span>" +
-           "&nbsp;&nbsp;&nbsp;Trick&nbsp; " + cur + "/13" +
-           "</div>" +
-         '<div class="row row-auction" title="' + auction + '">' + auction + "</div>" +
-         '<div class="row row-contract"><b>' + contract + "</b>" + vuln + hcp + "</div>";
+            '<span class="ns">NS&nbsp;' + won + "</span>" +
+            '&nbsp;&nbsp;&nbsp;<span class="ew">EW&nbsp;' + ew + "</span>" +
+            "&nbsp;&nbsp;&nbsp;" + t("trick") + "&nbsp; " + cur + "/13" +
+            "</div>" +
+          '<div class="row row-auction" title="' + auction + '">' + auction + "</div>" +
+          '<div class="row row-contract"><b>' + contract + "</b>" + vuln + hcp + "</div>";
 }
 
 function setNarr(t) {
@@ -656,8 +759,8 @@ function renderNarr() {
     const total = App.narrPages.length;
     const cur = Math.min(App.moviePage, total - 1);
     $("narr").textContent = total
-      ? "Bridge movie  [" + (cur + 1) + "/" + total + "]\n" + App.narrPages[cur]
-      : "End of the bridge movie.";
+      ? t("movieCap", cur, total) + "\n" + App.narrPages[cur]
+      : t("movieEnd");
     return;
   }
   const page = App.narrPages[Math.min(App.game.tricksPlayed, App.narrPages.length - 1)];
@@ -671,17 +774,19 @@ function showEndDialog() {
   const [won, level] = App.game.score;
   const d = App.curDealData;
   const made = d && d.contract ? won >= level : true;
-  const word = d && d.contract ? (made ? "DEAL" : "FAILED") : "PASS";
+  const word = d && d.contract ? (made ? t("dealWord") : t("failWord")) : t("passWord");
   const wEl = $("endWord");
   wEl.textContent = word;
-  wEl.className = "end-word beat " + (made ? "made" : (word === "PASS" ? "made" : "down"));
+  wEl.className = "end-word beat " + (made || !d || !d.contract ? "made" : "down");
+  const nsL = t("south"), ewL = t("east");
   $("endScore").textContent =
-    "NS  " + won + "      EW  " + (13 - won) + "      (contract needs " + level + ")";
+    nsL + "  " + won + "      " + ewL + "  " + (13 - won) + "      (" + t("endScoreNeeds") + " " + level + ")";
   const expert = ["Schenker", "Auken", "Horenstein", "Palliser", "Terkelsen"][App.curDeal % 5];
   let sub;
-  if (!d || !d.contract) sub = "Pass out -- no contract reached.";
-  else if (made) sub = d.contract.text + "  made by " + (won - level) + ".   Expert rating: " + expert;
-  else sub = d.contract.text + "  down by " + (level - won) + ".";
+  if (!d || !d.contract) sub = t("passOutSub");
+  else if (made) sub = t("madeSub", d.contract.text, (won - level)) +
+    "   " + t("expert") + ": " + expert;
+  else sub = t("downSub", d.contract.text, (level - won));
   $("endSub").textContent = sub;
 
   // record the result for the TOC marks
@@ -739,6 +844,8 @@ async function main() {
   fitStage();
   App.board.addEventListener("click", onBoardClick);
 
+  applyLocaleUI();
+
   // dialog buttons
   $("btnRestart").onclick = () => { hideEndDialog(); resetGame(); };
   $("btnAnswer").onclick = () => {
@@ -747,8 +854,7 @@ async function main() {
     App.moviePage = 0;
     App.collectingWinner = null;
     render();
-    const b = $("toolbar").children[4];   // "Movie" button
-    if (b) b.classList.toggle("on", true);
+    movieBtn();
     movieAutoNext();
   };
   $("btnNext").onclick = () => {
@@ -763,11 +869,12 @@ async function main() {
     const r = await fetch("/api/deals", { cache: "no-cache" });
     data = await r.json();
   } catch (e) {
-    $("status").textContent = "Failed to load deals: " + e;
+    $("status").textContent = t("failedLoad") + ": " + e;
     return;
   }
   App.data = data;
   buildTOC();
+  applyLocaleUI();
   selectLevel(1);
 
   // optional URL hooks for screenshots/automation:
@@ -780,6 +887,20 @@ async function main() {
     if (lv && lv.deals[dl]) playDeal(lvl, dl);
   }
   if (q.get("autoplay") === "1" && App.game) autoplayForShot();
+}
+
+// translate every static element tagged [data-i18n] (plus the <title>) for
+// the current locale and wire up the EN / 中文 toggle.
+function applyLocaleUI() {
+  const map = { restart: "restart", showAnswer: "showAnswer", nextDeal: "nextDeal", loading: "loading" };
+  document.querySelectorAll("[data-i18n]").forEach((e) => {
+    const k = e.getAttribute("data-i18n");
+    if (map[k]) e.textContent = t(k);
+  });
+  if (document.title !== t("pageTitle")) { document.title = t("pageTitle"); document.documentElement.lang = App.lang; }
+  const en = $("langEn"), zh = $("langZh");
+  if (en) { en.classList.toggle("on", App.lang === "en"); en.onclick = () => setLocale("en"); }
+  if (zh) { zh.classList.toggle("on", App.lang === "zh"); zh.onclick = () => setLocale("zh"); }
 }
 
 // play a handful of tricks (declarer = highest legal, defense = convention)
@@ -795,8 +916,9 @@ function autoplayForShot() {
     if (seat === SOUTH || seat === NORTH) {
       const legal = App.game.legal();
       legal.sort((a, b) => b.r - a.r);     // play a high card for a lively shot
-      const idx = App.game.hands[seat].findIndex((c) => sameCard(c, legal[0]));
-      playCard(idx, seat);
+      const top = legal[0];
+      const idx = top ? App.game.hands[seat].findIndex((c) => sameCard(c, top)) : -1;
+      if (idx >= 0) playCard(idx, seat);
     } else {
       pushUndo();
       App.game.defenseStep();

@@ -9,6 +9,7 @@
   --felt: #0b5d2e;
   --felt-edge: #063d1e;
   --gold: #ffd24a;
+  --body-font: "Segoe UI", "Microsoft YaHei", "PingFang SC", Tahoma, Arial, sans-serif;
 }
 
 * { box-sizing: border-box; }
@@ -17,9 +18,23 @@ html, body {
   margin: 0;
   height: 100%;
   background: #1c2733;            /* dark surround so the scaled window stands out */
-  font-family: "Segoe UI", Tahoma, Arial, sans-serif;
+  font-family: var(--body-font);
   overflow: hidden;               /* the stage is scaled, not the page scrolled */
 }
+
+/* floating EN / 中文 switch (fixed in screen space, not scaled with the stage) */
+#langbar {
+  position: fixed; top: 10px; right: 12px; z-index: 50;
+  display: flex; gap: 6px;
+}
+.langbtn {
+  min-width: 52px; height: 26px; padding: 0 10px;
+  font: bold 13px var(--body-font);
+  color: #d7e0ea; background: rgba(28,40,55,.85);
+  border: 1px solid #3a4a5e; border-radius: 5px; cursor: pointer;
+}
+.langbtn:hover { border-color: #6ea8fe; }
+.langbtn.on { color: #fff; background: #1f6feb; border-color: #1f6feb; }
 
 /* full-viewport centering box that measures the available space */
 #viewport {
@@ -65,7 +80,7 @@ html, body {
   height: 34px;
   border: 2px outset #fff;
   color: #fff;
-  font: bold 14px "Segoe UI", Arial, sans-serif;
+  font: bold 14px var(--body-font);
   cursor: pointer;
   border-radius: 2px;
 }
@@ -126,7 +141,7 @@ html, body {
   padding: 0 6px;
   border-top: 1px solid var(--win-dk);
   background: var(--win-bg);
-  font: 11px "Segoe UI", Arial, sans-serif;
+  font: 11px var(--body-font);
   color: #111;
 }
 
@@ -159,7 +174,7 @@ html, body {
   letter-spacing: .5px;
 }
 .play-strip .row-contract {
-  font: bold 13px "Segoe UI", Arial, sans-serif;
+  font: bold 13px var(--body-font);
   color: #222;
 }
 .play-strip .row-contract b { color: #0a6b12; }
@@ -177,7 +192,7 @@ html, body {
   background: #fff;
   border-top: 1px solid #b8c;
   padding: 4px 8px;
-  font: 12px "Segoe UI", Arial, sans-serif;
+  font: 12px var(--body-font);
   color: #111;
   overflow: hidden;
 }
@@ -193,7 +208,7 @@ html, body {
 .toolbar button {
   height: 20px;
   padding: 0 8px;
-  font: 11px "Segoe UI", Arial, sans-serif;
+  font: 11px var(--body-font);
   border: 2px outset #fff;
   background: var(--win-bg);
   cursor: pointer;
@@ -238,11 +253,11 @@ html, body {
   color: #cfe8cf;
   margin: 4px 0;
 }
-.end-sub { font: 14px "Segoe UI", Arial, sans-serif; margin-bottom: 14px; min-height: 18px; }
+.end-sub { font: 14px var(--body-font); margin-bottom: 14px; min-height: 18px; }
 .end-btns { display: flex; gap: 10px; justify-content: center; }
 .eb {
   width: 128px; height: 34px;
-  font: bold 13px "Segoe UI", Arial, sans-serif;
+  font: bold 13px var(--body-font);
   color: #fff; border: none; border-radius: 4px; cursor: pointer;
 }
 .eb:active { filter: brightness(.9); }

@@ -1,5 +1,7 @@
 # Bridge Master 2000 -- Web Edition
 
+[English](README.md) · **[简体中文](README_ZH.md)**
+
 A faithful web rebuild of the desktop `bm2000` build.  Same 5 skill levels and
 deals, same game model (you are declarer = South and dummy = North; the computer
 plays the East/West defense), same teaching narration, same "collect the trick"
@@ -7,6 +9,9 @@ pace, same flashy **DEAL / FAILED** end-of-deal dialog.  The whole app lives on 
 fixed **794×547** "window" that is **scaled with CSS `transform: scale()`** to fit
 your browser window while keeping its aspect ratio (no stretching / no
 letterbox distortion).
+
+The interface is **bilingual (English / 简体中文)** and **auto-switches to your
+browser / terminal language** (see [Language](#language--en--中文) below).
 
 ## Run it
 
@@ -77,6 +82,24 @@ Notes from the deploy:
   auto-restart after a reboot.  To make it persistent, register a systemd unit or
   add the `start.sh` call to a boot script.
 
+## Language — EN / 中文
+
+The web build shows **English or Simplified Chinese** automatically:
+
+* **Auto-detect** — on load it reads `navigator.language`; a `zh…` value picks
+  Chinese, anything else picks English.  So a Chinese-language browser / terminal
+  opens the game in Chinese, an English one in English.
+* **Manual override** — the **EN / 中文** buttons (top-right) switch at any time;
+  the choice is saved in `localStorage` and remembered next visit.
+* **URL override** — append `?lang=en` or `?lang=zh` to force a language
+  (e.g. `…/?level=1&deal=0&lang=zh`).
+
+The whole UI follows the choice — title bar, level buttons, status line,
+seat labels (南/西/北/东), toolbar (Replay/Take back/Step/Claim/Movie/…),
+the score strip (墩 / 局况 / 大牌), the narration header, and the end-of-deal
+dialog (完成 / 未成, 重新开始 / 显示答案 / 下一副).  Card faces, ranks, suits and
+the auction bids stay standard (2–A, ♠♥♦♣, 1NT, 4S, …) in both languages.
+
 ## Notes
 
 * 5 records in the original `winexe/hands` data have corrupt `md` values that
@@ -84,3 +107,6 @@ Notes from the deploy:
   does too).  530 playable deals remain.
 * The web build's defense uses the same defensive conventions as the desktop
   build (see `../analysis/GAPS.md`), not a full adversarial search.
+* Each card is given a unique internal id so two cards that legitimately share a
+  rank + suit (possible in the data) are still treated as distinct; without this
+  such boards can't be completed.
