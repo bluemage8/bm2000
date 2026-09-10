@@ -196,11 +196,15 @@ class App:
         self.last_played: Optional[Tuple[int, int]] = None
 
         # Original client area is 794x547; add a little for the title bar so
-        # the whole window matches the original's 800x576 footprint.
+        # the whole window matches the original's 800x576 footprint.  The window
+        # opens at the original size but the user may resize it -- the play
+        # board then scales the table + cards proportionally with the window
+        # (see _board_scale()).
+        self.BASE_W, self.BASE_H = 794, 547
         self.root.title(TITLES["toc"])
-        self.root.geometry("794x547+100+80")
+        self.root.geometry("%dx%d+100+80" % (self.BASE_W, self.BASE_H))
         self.root.configure(bg=WIN_BG)
-        self.root.minsize(760, 520)
+        self.root.minsize(560, 420)
 
         self._build_menu()
         self._build_toolbar()
@@ -592,6 +596,25 @@ class App:
     def _on_board_click(self, event):
         if self.play_state:
             self.play_state._on_click(event)
+
+    # -- board scaling ------------------------------------------------------ #
+    def _board_scale(self) -> float:
+        """Proportion the play table to the current window size.
+
+        The board canvas is whatever space is left after the fixed top strip,
+        NS/EW strip, narration box and toolbar.  At the original 794x547 window
+        this computes ~1.0, so the table looks exactly as before.  Resize the
+        window larger and the table/cards fill it; smaller and they shrink.
+        The scale never shrinks the board below 0.6 so cards stay readable.
+        """
+        b = getattr(self, "board", None)
+        if b is None or not b.winfo_exists():
+            return 1.0
+        cw, ch = b.winfo_width(), b.winfo_height()
+        if cw < 200 or ch < 200:
+            return 1.0
+        scale = min(cw / self.BASE_W, ch / self.BASE_H)
+        return max(0.6, min(scale, 2.2))
 
     # -- toolbar actions ---------------------------------------------------- #
     def _step_forward(self):
@@ -1056,23 +1079,26 @@ class _PlayState:
     # -- geometry for drawing ---------------------------------------------- #
     def _dims(self):
         # card size.  The "big" (default) mode is used for the N/S hands and the
-        # played/collected trick; "small" is the compact toggle.  Big is sized
-        # up so the ranks/pips are easy to read at a glance.
+        # played/collected trick; "small" is the compact toggle.  Both are scaled
+        # by the window (see _board_scale) so the table always fills the window.
         big = self.big
-        cw = 34 if big else 24
-        ch = 46 if big else 34
-        gap = 3 if big else 2
-        return cw, ch, gap
+        s = self.app._board_scale()
+        cw = int(round((34 if big else 24) * s))
+        ch = int(round((46 if big else 34) * s))
+        gap = int(round((3 if big else 2) * s))
+        return cw, ch, max(1, gap)
 
     def _play_dims(self):
         """Larger size for the N/S hands and the played/collected center trick,
         so the cards you actually read and play are the big on-screen ones.  The
-        face-down defense fans keep the (smaller) base _dims() size."""
+        face-down defense fans keep the (smaller) base _dims() size.  All sizes
+        scale with the window via _board_scale()."""
         big = self.big
-        cw = 40 if big else 28
-        ch = 56 if big else 40
-        gap = 4 if big else 2
-        return cw, ch, gap
+        s = self.app._board_scale()
+        cw = int(round((40 if big else 28) * s))
+        ch = int(round((56 if big else 40) * s))
+        gap = int(round((4 if big else 2) * s))
+        return cw, ch, max(1, gap)
 
     def _hand_x(self, seat: int, i: int, n: int, w: int, dims=None) -> int:
         cw, ch, gap = dims if dims else self._dims()
@@ -1082,10 +1108,11 @@ class _PlayState:
 
     def _hand_y(self, seat: int, h: int, dims=None) -> int:
         cw, ch, gap = dims if dims else self._dims()
+        sc = self.app._board_scale() if self.app is not None else 1.0
         if seat == SOUTH:
-            return h - ch - 8
+            return h - ch - int(round(8 * sc))
         if seat == NORTH:
-            return 24
+            return int(round(24 * sc))
         return h // 2 - ch // 2
 
     def _render(self):
@@ -1100,6 +1127,7 @@ class _PlayState:
             return
         cw, ch, gap = self._dims()          # base size (defense fans)
         pd_cw, pd_ch, pd_gap = self._play_dims()  # larger: N/S hands + trick
+        s = self.app._board_scale()
         hands = self._hands_left()
         trick = self._current_trick()
         winner = self._trick_winner()
@@ -1118,7 +1146,8 @@ class _PlayState:
         for seat in (NORTH, SOUTH, WEST, EAST):
             col = "#fff2a6" if seat in (SOUTH, NORTH) else "#dfe8df"
             b.create_text(labelpos[seat], text=names[seat], fill=col,
-                          font=("Segoe UI", 9, "bold"), anchor=anchors[seat])
+                          font=("Segoe UI", max(9, int(round(9 * s))), "bold"),
+                          anchor=anchors[seat])
 
         pdims = (pd_cw, pd_ch, pd_gap)
         # the two hands *you* play are drawn big (N/S)
@@ -1130,14 +1159,14 @@ class _PlayState:
                 hl = card in valid
                 CardWidget.draw(b, x, y, pd_cw, pd_ch, card, face_up=True,
                                 highlight=hl)
-        # the face-down defense fans stay at the base size
+        # the face-down defense fans stay at the base size (which also scales)
         for seat in (WEST, EAST):
             hand = hands[seat]
             y = self._hand_y(seat, h)
             if seat == WEST:
-                x = 40
+                x = int(40 * s)
             else:
-                x = w - 40 - cw
+                x = w - int(40 * s) - cw
             # stack vertically, but only show count of cards as a compact fan
             for i in range(len(hand)):
                 yy = y - (len(hand) - 1) * (ch * 0.5) // 2 + i * (ch * 0.5)
@@ -1162,12 +1191,13 @@ class _PlayState:
                     CardWidget.draw(b, tx - 3, ty - 3, pd_cw + 6, pd_ch + 6, card,
                                     face_up=True, dim=True, highlight=False)
                 CardWidget.draw(b, tx, ty, pd_cw, pd_ch, card, face_up=True,
-                                dim=False, highlight=is_win)
+                                 dim=False, highlight=is_win)
                 if collecting:
-                    b.create_text(tx + pd_cw // 2, ty - 6,
+                    b.create_text(tx + pd_cw // 2, ty - int(6 * s),
                                   text="WIN" if is_win else "",
                                   fill="#ffd24a" if is_win else "#cfe8cf",
-                                  font=("Arial", 9, "bold"), anchor="s")
+                                  font=("Arial", max(9, int(round(9 * s))),
+                                        "bold"), anchor="s")
 
         # NS / EW strip
         decl = self.sol.contract[0] if self.sol.contract else None
@@ -1194,6 +1224,11 @@ class _PlayState:
         # a new card is added.  Placing from the card center (subtract cw/ch//2)
         # also means growing the card box (_play_dims) doesn't shift the cluster.
         rad = 52   # anchor distance from the table center to each seat's slot
+        # scale the anchor with the window too, so the center trick keeps
+        # proportion as the table grows/shrinks
+        app = self.app
+        sc = app._board_scale() if app is not None else 1.0
+        rad = int(round(rad * sc))
         if seat == NORTH:
             return cx - cw // 2, cy - rad - ch // 2
         if seat == SOUTH:
