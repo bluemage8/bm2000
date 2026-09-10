@@ -1,5 +1,9 @@
 # Bridge Master 2000 (bm2000)
 
+[**简体中文 / Chinese**](README_ZH.md)  ·  English
+
+
+
 A faithful re-implementation of **Bridge Master 2000** — a classic Windows
 "learn to play bridge as declarer" teaching program.  It includes **two builds**
 that share one verified bridge engine:
