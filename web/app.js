@@ -165,10 +165,10 @@ function fitStage() {
   // scale the 794x547 design to fill the viewport (no upscale cap -- phones
   // need it bigger), preserving aspect ratio.
   const s = Math.min(vw / STAGE_W, vh / STAGE_H);
-  // centre the scaled box: origin is top-left, so translate by the leftover.
-  const tx = Math.round((vw - STAGE_W * s) / 2);
-  const ty = Math.round((vh - STAGE_H * s) / 2);
-  stage.style.transform = "translate(" + tx + "px," + ty + "px) scale(" + s + ")";
+  // centering is done by CSS flexbox on #viewport (align/justify-content:
+  // center) together with transform-origin: center.  Do NOT also translate
+  // here -- doing both double-shifts the stage off-center.
+  stage.style.transform = "scale(" + s + ")";
   return s;
 }
 
